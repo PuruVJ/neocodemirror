@@ -1,0 +1,48 @@
+{
+	"name": "neocodemirror",
+	"version": "0.0.1",
+	"private": true,
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
+	},
+	"devDependencies": {
+		"@codemirror/commands": "^6.2.3",
+		"@codemirror/lang-angular": "^0.1.0",
+		"@codemirror/lang-cpp": "^6.0.2",
+		"@codemirror/lang-css": "^6.2.0",
+		"@codemirror/lang-html": "^6.4.3",
+		"@codemirror/lang-java": "^6.0.1",
+		"@codemirror/lang-json": "^6.0.1",
+		"@codemirror/lang-less": "^6.0.0",
+		"@codemirror/lang-lezer": "^6.0.1",
+		"@codemirror/lang-markdown": "^6.1.1",
+		"@codemirror/lang-php": "^6.0.1",
+		"@codemirror/lang-python": "^6.1.2",
+		"@codemirror/lang-rust": "^6.0.1",
+		"@codemirror/lang-sass": "^6.0.1",
+		"@codemirror/lang-sql": "^6.4.1",
+		"@codemirror/lang-vue": "^0.1.1",
+		"@codemirror/lang-wast": "^6.0.1",
+		"@codemirror/lang-xml": "^6.0.2",
+		"@codemirror/language": "^6.6.0",
+		"@codemirror/state": "^6.2.0",
+		"@codemirror/view": "^6.10.0",
+		"@replit/codemirror-lang-svelte": "^6.0.0",
+		"@sveltejs/adapter-auto": "^2.0.1",
+		"@sveltejs/kit": "^1.15.8",
+		"svelte": "^3.58.0",
+		"svelte-check": "^3.2.0",
+		"tslib": "^2.5.0",
+		"typescript": "^5.0.4",
+		"vite": "^4.3.3"
+	},
+	"type": "module",
+	"dependencies": {
+		"@codemirror/lang-javascript": "^6.1.7",
+		"codemirror": "^6.0.1"
+	}
+}
