@@ -1,18 +1,18 @@
-import { EditorState, StateEffect, type Extension } from '@codemirror/state';
 import { defaultKeymap, indentWithTab } from '@codemirror/commands';
-import { EditorView, keymap } from '@codemirror/view';
 import { indentUnit, type LanguageSupport } from '@codemirror/language';
+import { EditorState, StateEffect, type Extension } from '@codemirror/state';
+import { EditorView, keymap } from '@codemirror/view';
+import { map, type MapStore } from 'nanostores';
 import type { Action } from 'svelte/action';
-
-import { writable, type Writable } from 'svelte/store';
 
 type Options = {
 	value: string;
 	setup?: 'basic' | 'minimal';
 	lang?: LanguageSupport;
-	instanceStore?: Writable<CodemirrorInstance>;
 	useTabs?: boolean;
 	tabSize?: number;
+	theme?: Extension;
+	instanceStore?: MapStore<CodemirrorInstance>;
 };
 
 type CodemirrorInstance = {
@@ -22,7 +22,7 @@ type CodemirrorInstance = {
 };
 
 export const withCodemirrorInstance = () =>
-	writable<CodemirrorInstance>({
+	map<CodemirrorInstance>({
 		state: null,
 		extensions: null,
 		value: null,
@@ -31,11 +31,11 @@ export const withCodemirrorInstance = () =>
 export const codemirror: Action<
 	HTMLElement,
 	Options,
-	{ 'on:neocm:change': (e: CustomEvent<string>) => void }
+	{ 'on:codemirror:change': (e: CustomEvent<string>) => void }
 > = (node, options) => {
 	if (!options) throw new Error('No options provided. At least `value` is required.');
 
-	let { value, setup, lang, instanceStore, useTabs = false, tabSize = 2 } = options;
+	let { value, setup, lang, instanceStore, useTabs = false, tabSize = 2, theme } = options;
 
 	let fulfill_editor_initialized: (...args: any) => void;
 	let editor_initialized = new Promise((r) => (fulfill_editor_initialized = r));
@@ -52,19 +52,15 @@ export const codemirror: Action<
 
 		value = new_value;
 
-		node.dispatchEvent(new CustomEvent('neocm:change', { detail: value }));
-		// dispatch('change', value);
+		node.dispatchEvent(new CustomEvent('codemirror:change', { detail: value }));
 
-		instanceStore?.update((instance) => ({
-			...instance,
-			value,
-		}));
+		instanceStore?.setKey('value', value);
 	}
 
 	const on_change = debounce(handle_change, 50);
 
 	(async () => {
-		extensions = await make_extensions(lang, setup, useTabs, tabSize);
+		extensions = await make_extensions(lang, setup, useTabs, tabSize, theme);
 
 		editor = new EditorView({
 			doc: value,
@@ -96,12 +92,24 @@ export const codemirror: Action<
 			setup = new_options.setup;
 			useTabs = new_options.useTabs ?? false;
 			tabSize = new_options.tabSize ?? 2;
+			theme = new_options.theme;
 
-			extensions = await make_extensions(lang, setup, useTabs, tabSize);
+			extensions = await make_extensions(lang, setup, useTabs, tabSize, theme);
 
 			editor.dispatch({
 				effects: StateEffect.reconfigure.of(extensions),
 			});
+
+			if (value !== new_options.value) {
+				value = new_options.value;
+				editor.dispatch({
+					changes: {
+						from: 0,
+						to: editor.state.doc.length,
+						insert: value,
+					},
+				});
+			}
 		},
 
 		destroy() {
@@ -116,7 +124,8 @@ async function make_extensions(
 	lang: Options['lang'],
 	setup: Options['setup'],
 	useTabs: Options['useTabs'] = false,
-	tabSize: Options['tabSize'] = 2
+	tabSize: Options['tabSize'] = 2,
+	theme: Extension | undefined
 ) {
 	const extensions: Extension[] = [
 		keymap.of([...defaultKeymap, ...(useTabs ? [indentWithTab] : [])]),
@@ -127,6 +136,7 @@ async function make_extensions(
 	await do_setup(extensions, { setup });
 
 	if (lang) extensions.push(lang);
+	if (theme) extensions.push(theme);
 
 	return extensions;
 }
