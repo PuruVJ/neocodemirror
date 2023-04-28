@@ -52,6 +52,7 @@
 		tabSize: 2,
 		theme: oneDark,
 		extensions: [],
+		diagnostics: [{ from: 6, to: 50, severity: 'error', message: 'This is an error' }],
 		instanceStore: store,
 	}}
 	on:codemirror:change={(e) => (options[selected].value = e.detail)}

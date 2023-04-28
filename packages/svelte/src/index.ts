@@ -1,5 +1,6 @@
 import { defaultKeymap, indentWithTab } from '@codemirror/commands';
 import { indentUnit, type LanguageSupport } from '@codemirror/language';
+import { setDiagnostics } from '@codemirror/lint';
 import { EditorState, StateEffect, type Extension } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import type { Properties as CSSProperties } from 'csstype';
@@ -26,6 +27,7 @@ type Options = {
 	styles?: Styles;
 	tabSize?: number;
 	theme?: Extension;
+	diagnostics?: import('@codemirror/lint').Diagnostic[];
 	// decorations?: NeoCMDecorations;
 	extensions?: Extension[];
 	instanceStore?: MapStore<CodemirrorInstance>;
@@ -36,6 +38,8 @@ type CodemirrorInstance = {
 	extensions: Extension | null;
 	value: string | null;
 };
+
+let diagnosticsModule: typeof import('@codemirror/lint');
 
 export const withCodemirrorInstance = () =>
 	map<CodemirrorInstance>({
@@ -61,6 +65,7 @@ export const codemirror: Action<
 		tabSize = 2,
 		theme,
 		styles,
+		diagnostics,
 		// cursorPos,
 		extensions,
 	} = options;
@@ -116,6 +121,8 @@ export const codemirror: Action<
 			},
 		});
 
+		make_diagnostics(editor, diagnostics);
+
 		instanceStore?.set({
 			view: editor,
 			extensions: internal_extensions,
@@ -130,11 +137,14 @@ export const codemirror: Action<
 			await editor_initialized;
 
 			lang = new_options.lang;
+			langMap = new_options.langMap;
 			setup = new_options.setup;
 			useTabs = new_options.useTabs ?? false;
 			tabSize = new_options.tabSize ?? 2;
 			theme = new_options.theme;
 			extensions = new_options.extensions;
+			styles = new_options.styles;
+			diagnostics = new_options.diagnostics;
 
 			internal_extensions = await make_extensions(
 				lang,
@@ -150,6 +160,8 @@ export const codemirror: Action<
 			editor.dispatch({
 				effects: StateEffect.reconfigure.of(internal_extensions),
 			});
+
+			make_diagnostics(editor, diagnostics);
 
 			// if (cursorPos !== new_options.cursorPos) {
 			// 	cursorPos = new_options.cursorPos ?? 0;
@@ -186,6 +198,13 @@ export const codemirror: Action<
 		},
 	};
 };
+
+async function make_diagnostics(editor: EditorView, diagnostics: Options['diagnostics']) {
+	if (!diagnosticsModule) diagnosticsModule = await import('@codemirror/lint');
+
+	const tr = diagnosticsModule.setDiagnostics(editor.state, diagnostics ?? []);
+	editor.dispatch(tr);
+}
 
 async function make_extensions(
 	lang: Options['lang'],
