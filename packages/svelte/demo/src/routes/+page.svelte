@@ -1,19 +1,18 @@
 <script lang="ts">
-	import { javascript } from '@codemirror/lang-javascript';
 	import { oneDark } from '@codemirror/theme-one-dark';
 	import { codemirror, withCodemirrorInstance } from '@neocodemirror/svelte';
-	import { svelte } from '@replit/codemirror-lang-svelte';
 
 	const store = withCodemirrorInstance();
 
 	const options = {
 		svelte: {
 			value: '<scr' + 'ipt>\n\tconsole.log("Hello, world!");\n</scr' + 'ipt>\n\nHello {world}',
-			lang: svelte(),
 		},
 		js: {
 			value: 'console.log("Hello, world!");',
-			lang: javascript(),
+		},
+		md: {
+			value: '# Hello\n ```js\nconsole.log("Hello, world!");\n```\n\nHello {world}',
 		},
 	};
 
@@ -31,7 +30,10 @@
 	$: console.log($store);
 </script>
 
-<button on:click={() => (selected = selected === 'js' ? 'svelte' : 'js')}>Toggle</button>
+<button on:click={() => (selected = 'js')}>JS</button>
+<button on:click={() => (selected = 'svelte')}>Svelte</button>
+<button on:click={() => (selected = 'md')}>MD</button>
+
 <button on:click={() => (isMarked = !isMarked)}>Toggle mark state</button>
 
 <button on:click={change_pos}>Change cursor: {cursorPos}</button>
@@ -40,7 +42,12 @@
 	use:codemirror={{
 		value: options[selected].value,
 		setup: 'basic',
-		lang: options[selected].lang,
+		lang: selected,
+		langMap: {
+			js: () => import('@codemirror/lang-javascript').then((m) => m.javascript()),
+			svelte: () => import('@replit/codemirror-lang-svelte').then((m) => m.svelte()),
+			md: () => import('@codemirror/lang-markdown').then((m) => m.markdown()),
+		},
 		useTabs: true,
 		tabSize: 2,
 		theme: oneDark,
