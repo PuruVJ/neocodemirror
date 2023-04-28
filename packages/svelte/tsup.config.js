@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-	entry: ['./src/lib/index.ts'],
+	entry: ['./src/index.ts'],
 	dts: { resolve: true },
 	treeshake: 'smallest',
 	external: [
@@ -13,7 +13,5 @@ export default defineConfig({
 	],
 	bundle: true,
 	format: ['esm'],
-	minify: 'terser',
-	noExternal: [/nanostores/],
 	replaceNodeEnv: true,
 });

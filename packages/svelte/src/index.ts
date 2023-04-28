@@ -1,10 +1,10 @@
 import { defaultKeymap, indentWithTab } from '@codemirror/commands';
 import { indentUnit, type LanguageSupport } from '@codemirror/language';
-import { EditorState, StateEffect, type Extension, EditorSelection } from '@codemirror/state';
+import { EditorState, StateEffect, type Extension } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
+import type { Properties as CSSProperties } from 'csstype';
 import { map, type MapStore } from 'nanostores';
 import type { Action } from 'svelte/action';
-import type { Properties as CSSProperties } from 'csstype';
 
 // type NeoCMDecorations = {
 // 	mark: { from: number; to: number; class?: string; attributes?: Record<string, string> };

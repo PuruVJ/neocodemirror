@@ -1,8 +1,8 @@
 import { LanguageSupport } from '@codemirror/language';
 import { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { MapStore } from 'nanostores';
 import { Properties } from 'csstype';
+import { MapStore } from 'nanostores';
 
 /**
  * Actions can return an object containing the two properties defined in this interface. Both are optional.

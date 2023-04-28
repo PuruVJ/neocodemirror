@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { codemirror, withCodemirrorInstance } from '$lib';
-	import { svelte } from '@replit/codemirror-lang-svelte';
 	import { javascript } from '@codemirror/lang-javascript';
 	import { oneDark } from '@codemirror/theme-one-dark';
+	import { codemirror, withCodemirrorInstance } from '@neocodemirror/svelte';
+	import { svelte } from '@replit/codemirror-lang-svelte';
 
 	const store = withCodemirrorInstance();
 
