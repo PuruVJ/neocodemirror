@@ -202,8 +202,8 @@ export const codemirror: Action<
 async function make_diagnostics(editor: EditorView, diagnostics: Options['diagnostics']) {
 	if (!diagnosticsModule) diagnosticsModule = await import('@codemirror/lint');
 
-	const tr = diagnosticsModule.setDiagnostics(editor.state, diagnostics ?? []);
-	editor.dispatch(tr);
+	const tr = diagnosticsModule.setDiagnosticsEffect.of(diagnostics ?? []);
+	editor.dispatch({ effects: tr });
 }
 
 async function make_extensions(
