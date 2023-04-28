@@ -1,29 +1,42 @@
 import { defaultKeymap, indentWithTab } from '@codemirror/commands';
 import { indentUnit, type LanguageSupport } from '@codemirror/language';
-import { EditorState, StateEffect, type Extension } from '@codemirror/state';
+import { EditorState, StateEffect, type Extension, EditorSelection } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import { map, type MapStore } from 'nanostores';
 import type { Action } from 'svelte/action';
+import type { Properties as CSSProperties } from 'csstype';
+
+// type NeoCMDecorations = {
+// 	mark: { from: number; to: number; class?: string; attributes?: Record<string, string> };
+// };
+
+type Styles = {
+	[val: string]: CSSProperties | Styles;
+};
 
 type Options = {
 	value: string;
 	setup?: 'basic' | 'minimal';
 	lang?: LanguageSupport;
 	useTabs?: boolean;
+	// cursorPos?: number;
+	styles?: Styles;
 	tabSize?: number;
 	theme?: Extension;
+	// decorations?: NeoCMDecorations;
+	extensions?: Extension[];
 	instanceStore?: MapStore<CodemirrorInstance>;
 };
 
 type CodemirrorInstance = {
-	state: EditorState | null;
+	view: EditorView | null;
 	extensions: Extension | null;
 	value: string | null;
 };
 
 export const withCodemirrorInstance = () =>
 	map<CodemirrorInstance>({
-		state: null,
+		view: null,
 		extensions: null,
 		value: null,
 	});
@@ -35,21 +48,31 @@ export const codemirror: Action<
 > = (node, options) => {
 	if (!options) throw new Error('No options provided. At least `value` is required.');
 
-	let { value, setup, lang, instanceStore, useTabs = false, tabSize = 2, theme } = options;
+	let {
+		value,
+		setup,
+		lang,
+		instanceStore,
+		useTabs = false,
+		tabSize = 2,
+		theme,
+		styles,
+		// cursorPos,
+		extensions,
+	} = options;
 
 	let fulfill_editor_initialized: (...args: any) => void;
 	let editor_initialized = new Promise((r) => (fulfill_editor_initialized = r));
 	let editor: EditorView;
 	let update_from_state = false;
 
-	let extensions: Extension[] = [];
+	let internal_extensions: Extension[] = [];
 
 	function handle_change(): void {
 		const new_value = editor.state.doc.toString();
 		if (new_value === value) return;
 
 		update_from_state = true;
-
 		value = new_value;
 
 		node.dispatchEvent(new CustomEvent('codemirror:change', { detail: value }));
@@ -60,24 +83,37 @@ export const codemirror: Action<
 	const on_change = debounce(handle_change, 50);
 
 	(async () => {
-		extensions = await make_extensions(lang, setup, useTabs, tabSize, theme);
+		internal_extensions = await make_extensions(
+			lang,
+			setup,
+			useTabs,
+			tabSize,
+			theme,
+			styles,
+			extensions
+		);
 
 		editor = new EditorView({
 			doc: value,
-			extensions,
+			extensions: internal_extensions,
 			parent: node,
 			dispatch(tr) {
+				// cursorPos = tr.newSelection.main.head;
+
 				editor.update([tr]);
 
 				if (tr.docChanged) {
 					on_change();
+					// editor.dispatch({
+					// 	selection: EditorSelection.cursor(cursorPos),
+					// });
 				}
 			},
 		});
 
 		instanceStore?.set({
-			state: editor.state,
-			extensions,
+			view: editor,
+			extensions: internal_extensions,
 			value,
 		});
 
@@ -93,12 +129,31 @@ export const codemirror: Action<
 			useTabs = new_options.useTabs ?? false;
 			tabSize = new_options.tabSize ?? 2;
 			theme = new_options.theme;
+			extensions = new_options.extensions;
 
-			extensions = await make_extensions(lang, setup, useTabs, tabSize, theme);
+			internal_extensions = await make_extensions(
+				lang,
+				setup,
+				useTabs,
+				tabSize,
+				theme,
+				styles,
+				extensions
+			);
 
 			editor.dispatch({
-				effects: StateEffect.reconfigure.of(extensions),
+				effects: StateEffect.reconfigure.of(internal_extensions),
 			});
+
+			// if (cursorPos !== new_options.cursorPos) {
+			// 	cursorPos = new_options.cursorPos ?? 0;
+			// 	editor.dispatch({
+			// 		selection: {
+			// 			anchor: cursorPos,
+			// 			head: cursorPos,
+			// 		},
+			// 	});
+			// }
 
 			if (value !== new_options.value) {
 				value = new_options.value;
@@ -110,6 +165,12 @@ export const codemirror: Action<
 					},
 				});
 			}
+
+			instanceStore?.set({
+				view: editor,
+				extensions: internal_extensions,
+				value,
+			});
 		},
 
 		destroy() {
@@ -125,20 +186,27 @@ async function make_extensions(
 	setup: Options['setup'],
 	useTabs: Options['useTabs'] = false,
 	tabSize: Options['tabSize'] = 2,
-	theme: Extension | undefined
+	theme: Extension | undefined,
+	styles: Options['styles'] | undefined,
+	extensions: Extension[] | undefined
 ) {
-	const extensions: Extension[] = [
+	const internal_extensions: Extension[] = [
 		keymap.of([...defaultKeymap, ...(useTabs ? [indentWithTab] : [])]),
 		EditorState.tabSize.of(tabSize),
 		indentUnit.of(useTabs ? '\t' : ' '.repeat(tabSize)),
 	];
 
-	await do_setup(extensions, { setup });
+	await do_setup(internal_extensions, { setup });
 
-	if (lang) extensions.push(lang);
-	if (theme) extensions.push(theme);
+	if (lang) {
+		internal_extensions.push(lang);
+	}
 
-	return extensions;
+	if (theme) internal_extensions.push(theme);
+	// @ts-ignore
+	if (styles) internal_extensions.push(EditorView.theme(styles));
+
+	return [internal_extensions, extensions ?? []];
 }
 
 async function do_setup(extensions: Extension[], { setup }: { setup: Options['setup'] }) {

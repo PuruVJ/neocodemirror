@@ -30,6 +30,7 @@
 	},
 	"type": "module",
 	"dependencies": {
+		"csstype": "^3.1.2",
 		"nanostores": "^0.8.1"
 	}
 }

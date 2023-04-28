@@ -1,6 +1,8 @@
 import { LanguageSupport } from '@codemirror/language';
-import { EditorState, Extension } from '@codemirror/state';
+import { Extension } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
 import { MapStore } from 'nanostores';
+import { Properties } from 'csstype';
 
 /**
  * Actions can return an object containing the two properties defined in this interface. Both are optional.
@@ -58,22 +60,28 @@ interface Action<Element = HTMLElement, Parameter = any, Attributes extends Reco
     <Node extends Element>(node: Node, parameter?: Parameter): void | ActionReturn<Parameter, Attributes>;
 }
 
+type Styles = {
+    [val: string]: Properties | Styles;
+};
 type Options = {
     value: string;
     setup?: 'basic' | 'minimal';
     lang?: LanguageSupport;
     useTabs?: boolean;
+    styles?: Styles;
     tabSize?: number;
+    theme?: Extension;
+    extensions?: Extension[];
     instanceStore?: MapStore<CodemirrorInstance>;
 };
 type CodemirrorInstance = {
-    state: EditorState | null;
+    view: EditorView | null;
     extensions: Extension | null;
     value: string | null;
 };
 declare const withCodemirrorInstance: () => MapStore<CodemirrorInstance>;
 declare const codemirror: Action<HTMLElement, Options, {
-    'on:neocm:change': (e: CustomEvent<string>) => void;
+    'on:codemirror:change': (e: CustomEvent<string>) => void;
 }>;
 
 export { codemirror, withCodemirrorInstance };

@@ -2,13 +2,13 @@
 	import { codemirror, withCodemirrorInstance } from '$lib';
 	import { svelte } from '@replit/codemirror-lang-svelte';
 	import { javascript } from '@codemirror/lang-javascript';
-	import { oneDarkTheme } from '@codemirror/theme-one-dark';
+	import { oneDark } from '@codemirror/theme-one-dark';
 
 	const store = withCodemirrorInstance();
 
 	const options = {
 		svelte: {
-			value: '<scr' + 'ipt>\n\tconsole.log("Hello, world!");\n</scr' + 'ipt>',
+			value: '<scr' + 'ipt>\n\tconsole.log("Hello, world!");\n</scr' + 'ipt>\n\nHello {world}',
 			lang: svelte(),
 		},
 		js: {
@@ -19,10 +19,22 @@
 
 	let selected: keyof typeof options = 'svelte';
 
+	let isMarked = false;
+
+	let cursorPos = 40;
+
+	function change_pos() {
+		$store.view?.focus();
+		cursorPos = 0 + Math.floor(Math.random() * ($store.value?.length ?? 0));
+	}
+
 	$: console.log($store);
 </script>
 
-<button on:click={(e) => (selected = selected === 'js' ? 'svelte' : 'js')}>Toggle</button>
+<button on:click={() => (selected = selected === 'js' ? 'svelte' : 'js')}>Toggle</button>
+<button on:click={() => (isMarked = !isMarked)}>Toggle mark state</button>
+
+<button on:click={change_pos}>Change cursor: {cursorPos}</button>
 
 <div
 	use:codemirror={{
@@ -31,8 +43,19 @@
 		lang: options[selected].lang,
 		useTabs: true,
 		tabSize: 2,
-		theme: oneDarkTheme,
+		theme: oneDark,
+		extensions: [],
 		instanceStore: store,
 	}}
 	on:codemirror:change={(e) => (options[selected].value = e.detail)}
 />
+
+<style>
+	div :global(*) {
+		font-family: 'Jetbrains mono';
+	}
+
+	div :global(.cm-mark) {
+		background-color: #ff0000;
+	}
+</style>
