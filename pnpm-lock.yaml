@@ -47,6 +47,9 @@ importers:
       '@codemirror/lang-javascript':
         specifier: ^6.1.7
         version: 6.1.7
+      '@codemirror/lang-markdown':
+        specifier: ^6.1.1
+        version: 6.1.1
       '@codemirror/theme-one-dark':
         specifier: ^6.1.2
         version: 6.1.2
@@ -352,6 +355,17 @@ packages:
       '@codemirror/view': 6.10.0
       '@lezer/common': 1.0.2
       '@lezer/javascript': 1.4.3
+    dev: false
+
+  /@codemirror/lang-markdown@6.1.1:
+    resolution: {integrity: sha512-n87Ms6Y5UYb1UkFu8sRzTLfq/yyF1y2AYiWvaVdbBQi5WDj1tFk5N+AKA+WC0Jcjc1VxvrCCM0iizjdYYi9sFQ==}
+    dependencies:
+      '@codemirror/lang-html': 6.4.3
+      '@codemirror/language': 6.6.0
+      '@codemirror/state': 6.2.0
+      '@codemirror/view': 6.10.0
+      '@lezer/common': 1.0.2
+      '@lezer/markdown': 1.0.2
     dev: false
 
   /@codemirror/language@6.6.0:
@@ -670,6 +684,13 @@ packages:
     resolution: {integrity: sha512-7o+e4og/QoC/6btozDPJqnzBhUaD1fMfmvnEKQO1wRRiTse1WxaJ3OMEXZJnkgT6HCcTVOctSoXK9jGJw2oe9g==}
     dependencies:
       '@lezer/common': 1.0.2
+    dev: false
+
+  /@lezer/markdown@1.0.2:
+    resolution: {integrity: sha512-8CY0OoZ6V5EzPjSPeJ4KLVbtXdLBd8V6sRCooN5kHnO28ytreEGTyrtU/zUwo/XLRzGr/e1g44KlzKi3yWGB5A==}
+    dependencies:
+      '@lezer/common': 1.0.2
+      '@lezer/highlight': 1.1.4
     dev: false
 
   /@manypkg/find-root@1.1.0:

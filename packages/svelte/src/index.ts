@@ -6,6 +6,8 @@ import type { Properties as CSSProperties } from 'csstype';
 import { map, type MapStore } from 'nanostores';
 import type { Action } from 'svelte/action';
 
+type MaybePromise<T> = T | Promise<T>;
+
 // type NeoCMDecorations = {
 // 	mark: { from: number; to: number; class?: string; attributes?: Record<string, string> };
 // };
@@ -17,7 +19,8 @@ type Styles = {
 type Options = {
 	value: string;
 	setup?: 'basic' | 'minimal';
-	lang?: LanguageSupport;
+	lang?: LanguageSupport | string;
+	langMap?: Record<string, () => MaybePromise<LanguageSupport>>;
 	useTabs?: boolean;
 	// cursorPos?: number;
 	styles?: Styles;
@@ -52,6 +55,7 @@ export const codemirror: Action<
 		value,
 		setup,
 		lang,
+		langMap,
 		instanceStore,
 		useTabs = false,
 		tabSize = 2,
@@ -85,6 +89,7 @@ export const codemirror: Action<
 	(async () => {
 		internal_extensions = await make_extensions(
 			lang,
+			langMap,
 			setup,
 			useTabs,
 			tabSize,
@@ -133,6 +138,7 @@ export const codemirror: Action<
 
 			internal_extensions = await make_extensions(
 				lang,
+				langMap,
 				setup,
 				useTabs,
 				tabSize,
@@ -183,6 +189,7 @@ export const codemirror: Action<
 
 async function make_extensions(
 	lang: Options['lang'],
+	langMap: Options['langMap'],
 	setup: Options['setup'],
 	useTabs: Options['useTabs'] = false,
 	tabSize: Options['tabSize'] = 2,
@@ -199,7 +206,15 @@ async function make_extensions(
 	await do_setup(internal_extensions, { setup });
 
 	if (lang) {
-		internal_extensions.push(lang);
+		if (typeof lang === 'string') {
+			if (!langMap) throw new Error('`langMap` is required when `lang` is a string.');
+			if (!(lang in langMap)) throw new Error(`Language "${lang}" is not defined in \`langMap\`.`);
+
+			const lang_support = await langMap[lang]();
+			internal_extensions.push(lang_support);
+		} else {
+			internal_extensions.push(lang);
+		}
 	}
 
 	if (theme) internal_extensions.push(theme);
