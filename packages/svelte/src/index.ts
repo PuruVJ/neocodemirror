@@ -1,9 +1,9 @@
 import { defaultKeymap, indentWithTab } from '@codemirror/commands';
 import { indentUnit, type LanguageSupport } from '@codemirror/language';
-import { setDiagnostics } from '@codemirror/lint';
 import { EditorState, StateEffect, type Extension } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import type { Properties as CSSProperties } from 'csstype';
+import { dequal } from 'dequal';
 import { map, type MapStore } from 'nanostores';
 import type { Action } from 'svelte/action';
 
@@ -23,6 +23,7 @@ type Options = {
 	lang?: LanguageSupport | string;
 	langMap?: Record<string, () => MaybePromise<LanguageSupport>>;
 	useTabs?: boolean;
+	readonly?: boolean;
 	// cursorPos?: number;
 	styles?: Styles;
 	tabSize?: number;
@@ -55,25 +56,11 @@ export const codemirror: Action<
 > = (node, options) => {
 	if (!options) throw new Error('No options provided. At least `value` is required.');
 
-	let {
-		value,
-		setup,
-		lang,
-		langMap,
-		instanceStore,
-		useTabs = false,
-		tabSize = 2,
-		theme,
-		styles,
-		diagnostics,
-		// cursorPos,
-		extensions,
-	} = options;
+	let { value, instanceStore, diagnostics } = options;
 
 	let fulfill_editor_initialized: (...args: any) => void;
 	let editor_initialized = new Promise((r) => (fulfill_editor_initialized = r));
 	let editor: EditorView;
-	let update_from_state = false;
 
 	let internal_extensions: Extension[] = [];
 
@@ -81,7 +68,6 @@ export const codemirror: Action<
 		const new_value = editor.state.doc.toString();
 		if (new_value === value) return;
 
-		update_from_state = true;
 		value = new_value;
 
 		node.dispatchEvent(new CustomEvent('codemirror:change', { detail: value }));
@@ -92,31 +78,17 @@ export const codemirror: Action<
 	const on_change = debounce(handle_change, 50);
 
 	(async () => {
-		internal_extensions = await make_extensions(
-			lang,
-			langMap,
-			setup,
-			useTabs,
-			tabSize,
-			theme,
-			styles,
-			extensions
-		);
+		internal_extensions = await make_extensions(options);
 
 		editor = new EditorView({
 			doc: value,
 			extensions: internal_extensions,
 			parent: node,
 			dispatch(tr) {
-				// cursorPos = tr.newSelection.main.head;
-
 				editor.update([tr]);
 
 				if (tr.docChanged) {
 					on_change();
-					// editor.dispatch({
-					// 	selection: EditorSelection.cursor(cursorPos),
-					// });
 				}
 			},
 		});
@@ -136,43 +108,6 @@ export const codemirror: Action<
 		async update(new_options: Options) {
 			await editor_initialized;
 
-			lang = new_options.lang;
-			langMap = new_options.langMap;
-			setup = new_options.setup;
-			useTabs = new_options.useTabs ?? false;
-			tabSize = new_options.tabSize ?? 2;
-			theme = new_options.theme;
-			extensions = new_options.extensions;
-			styles = new_options.styles;
-			diagnostics = new_options.diagnostics;
-
-			internal_extensions = await make_extensions(
-				lang,
-				langMap,
-				setup,
-				useTabs,
-				tabSize,
-				theme,
-				styles,
-				extensions
-			);
-
-			editor.dispatch({
-				effects: StateEffect.reconfigure.of(internal_extensions),
-			});
-
-			make_diagnostics(editor, diagnostics);
-
-			// if (cursorPos !== new_options.cursorPos) {
-			// 	cursorPos = new_options.cursorPos ?? 0;
-			// 	editor.dispatch({
-			// 		selection: {
-			// 			anchor: cursorPos,
-			// 			head: cursorPos,
-			// 		},
-			// 	});
-			// }
-
 			if (value !== new_options.value) {
 				value = new_options.value;
 				editor.dispatch({
@@ -182,6 +117,24 @@ export const codemirror: Action<
 						insert: value,
 					},
 				});
+			}
+
+			if (
+				!dequal(
+					omit(options, ['value', 'diagnostics']),
+					omit(new_options, ['value', 'diagnostics'])
+				)
+			) {
+				internal_extensions = await make_extensions(new_options);
+
+				editor.dispatch({
+					effects: StateEffect.reconfigure.of(internal_extensions),
+					selection: editor.state.selection,
+				});
+			}
+
+			if (!dequal(options.diagnostics, new_options.diagnostics)) {
+				make_diagnostics(editor, new_options.diagnostics);
 			}
 
 			instanceStore?.set({
@@ -200,22 +153,25 @@ export const codemirror: Action<
 };
 
 async function make_diagnostics(editor: EditorView, diagnostics: Options['diagnostics']) {
+	if (!diagnostics) return;
+
 	if (!diagnosticsModule) diagnosticsModule = await import('@codemirror/lint');
 
-	const tr = diagnosticsModule.setDiagnosticsEffect.of(diagnostics ?? []);
-	editor.dispatch({ effects: tr });
+	const tr = diagnosticsModule.setDiagnostics(editor.state, diagnostics ?? []);
+	editor.dispatch(tr);
 }
 
-async function make_extensions(
-	lang: Options['lang'],
-	langMap: Options['langMap'],
-	setup: Options['setup'],
-	useTabs: Options['useTabs'] = false,
-	tabSize: Options['tabSize'] = 2,
-	theme: Extension | undefined,
-	styles: Options['styles'] | undefined,
-	extensions: Extension[] | undefined
-) {
+async function make_extensions({
+	lang,
+	langMap,
+	setup,
+	useTabs,
+	tabSize = 2,
+	theme,
+	styles,
+	extensions,
+	readonly,
+}: Options) {
 	const internal_extensions: Extension[] = [
 		keymap.of([...defaultKeymap, ...(useTabs ? [indentWithTab] : [])]),
 		EditorState.tabSize.of(tabSize),
@@ -239,6 +195,7 @@ async function make_extensions(
 	if (theme) internal_extensions.push(theme);
 	// @ts-ignore
 	if (styles) internal_extensions.push(EditorView.theme(styles));
+	if (readonly) internal_extensions.push(EditorView.editable.of(false));
 
 	return [internal_extensions, extensions ?? []];
 }
@@ -286,4 +243,14 @@ function debounce<T extends (...args: any[]) => any>(
 			timeout = null;
 		}
 	} as T;
+}
+
+function omit<T extends object, K extends (keyof T)[]>(obj: T, values: K): Omit<T, K[number]> {
+	const new_obj = Object.assign({}, obj);
+
+	for (const value of values) {
+		delete new_obj[value];
+	}
+
+	return new_obj;
 }

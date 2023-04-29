@@ -16,11 +16,31 @@
 		},
 	};
 
+	function make_diagnostics() {
+		const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a));
+
+		const from = rand(0, ($store.value?.length ?? 0) / 2);
+		const to = rand(from, $store.value?.length ?? 0);
+
+		console.log({ from, to });
+
+		diagnostics = [
+			{
+				from,
+				to,
+				severity: 'warning',
+				message: 'This is an error',
+			},
+		];
+	}
+
 	let selected: keyof typeof options = 'svelte';
 
 	let isMarked = false;
 
 	let cursorPos = 40;
+
+	let diagnostics = [];
 
 	function change_pos() {
 		$store.view?.focus();
@@ -34,7 +54,7 @@
 <button on:click={() => (selected = 'svelte')}>Svelte</button>
 <button on:click={() => (selected = 'md')}>MD</button>
 
-<button on:click={() => (isMarked = !isMarked)}>Toggle mark state</button>
+<button on:click={() => make_diagnostics()}>Change diagnostics</button>
 
 <button on:click={change_pos}>Change cursor: {cursorPos}</button>
 
@@ -52,7 +72,7 @@
 		tabSize: 2,
 		theme: oneDark,
 		extensions: [],
-		diagnostics: [{ from: 6, to: 50, severity: 'error', message: 'This is an error' }],
+		diagnostics: diagnostics,
 		instanceStore: store,
 	}}
 	on:codemirror:change={(e) => (options[selected].value = e.detail)}
