@@ -47,7 +47,6 @@
 	},
 	"dependencies": {
 		"csstype": "^3.1.2",
-		"dequal": "^2.0.3",
 		"nanostores": "^0.8.1"
 	},
 	"devDependencies": {

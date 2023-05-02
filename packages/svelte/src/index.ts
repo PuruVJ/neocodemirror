@@ -1,11 +1,10 @@
 import { defaultKeymap, indentWithTab } from '@codemirror/commands';
 import { indentUnit, type LanguageSupport } from '@codemirror/language';
-import { EditorState, StateEffect, type Extension } from '@codemirror/state';
+import { Compartment, EditorState, type Extension } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import type { Properties as CSSProperties } from 'csstype';
-import { dequal } from 'dequal';
 import { map, type MapStore } from 'nanostores';
-import type { Action } from 'svelte/action';
+import type { ActionReturn } from 'svelte/action';
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -49,11 +48,15 @@ export const withCodemirrorInstance = () =>
 		value: null,
 	});
 
-export const codemirror: Action<
-	HTMLElement,
+export const codemirror = (
+	node: HTMLElement,
+	options: Options
+): ActionReturn<
 	Options,
-	{ 'on:codemirror:change': (e: CustomEvent<string>) => void }
-> = (node, options) => {
+	{
+		'on:codemirror:change': (e: CustomEvent<string>) => void;
+	}
+> => {
 	if (!options) throw new Error('No options provided. At least `value` is required.');
 
 	let { value, instanceStore, diagnostics } = options;
@@ -63,6 +66,37 @@ export const codemirror: Action<
 	let editor: EditorView;
 
 	let internal_extensions: Extension[] = [];
+
+	let update_from_state = false;
+
+	const setup_compartment = new Compartment();
+	const lang_compartment = new Compartment();
+	const theming_compartment = new Compartment();
+	const tabs_compartment = new Compartment();
+	const readonly_compartment = new Compartment();
+	const extensions_compartment = new Compartment();
+
+	async function make_extensions({
+		lang,
+		langMap,
+		setup,
+		useTabs,
+		tabSize = 2,
+		theme,
+		styles,
+		extensions,
+		readonly,
+	}: Options) {
+		return [
+			keymap.of([...defaultKeymap, ...(useTabs ? [indentWithTab] : [])]),
+			setup_compartment.of((await get_setup(setup)) ?? []),
+			lang_compartment.of(await get_lang(lang, langMap)),
+			theming_compartment.of(get_theme(theme, styles)),
+			tabs_compartment.of(await get_tab_setting(useTabs, tabSize)),
+			readonly_compartment.of(EditorView.editable.of(!readonly)),
+			extensions_compartment.of(extensions ?? []),
+		];
+	}
 
 	function handle_change(): void {
 		const new_value = editor.state.doc.toString();
@@ -89,6 +123,8 @@ export const codemirror: Action<
 
 				if (tr.docChanged) {
 					on_change();
+
+					update_from_state = true;
 				}
 			},
 		});
@@ -119,29 +155,100 @@ export const codemirror: Action<
 				});
 			}
 
-			if (
-				!dequal(
-					omit(options, ['value', 'diagnostics']),
-					omit(new_options, ['value', 'diagnostics'])
-				)
-			) {
-				internal_extensions = await make_extensions(new_options);
-
+			if (new_options.setup) {
+				if (options.setup !== new_options.setup) {
+					editor.dispatch({
+						effects: setup_compartment.reconfigure(await get_setup(new_options.setup)),
+					});
+				}
+			} else {
 				editor.dispatch({
-					effects: StateEffect.reconfigure.of(internal_extensions),
-					selection: editor.state.selection,
+					effects: setup_compartment.reconfigure([]),
 				});
 			}
 
-			if (!dequal(options.diagnostics, new_options.diagnostics)) {
-				make_diagnostics(editor, new_options.diagnostics);
+			if (new_options.lang) {
+				if (options.lang !== new_options.lang) {
+					editor.dispatch({
+						effects: lang_compartment.reconfigure(
+							await get_lang(new_options.lang, new_options.langMap)
+						),
+					});
+				}
+			} else {
+				// Remove
+				editor.dispatch({
+					effects: lang_compartment.reconfigure([]),
+				});
 			}
+
+			if (new_options.useTabs || new_options.tabSize) {
+				if (options.useTabs !== new_options.useTabs || options.tabSize !== new_options.tabSize) {
+					editor.dispatch({
+						effects: tabs_compartment.reconfigure(
+							await get_tab_setting(new_options.useTabs, new_options.tabSize)
+						),
+					});
+				}
+			} else {
+				// Remove
+				editor.dispatch({
+					effects: tabs_compartment.reconfigure([await get_tab_setting(false, 2)]),
+				});
+			}
+
+			if (new_options.styles || new_options.theme) {
+				if (options.theme !== new_options.theme) {
+					editor.dispatch({
+						effects: theming_compartment.reconfigure(
+							get_theme(new_options.theme, new_options.styles)
+						),
+					});
+				}
+			} else {
+				// Remove
+				editor.dispatch({
+					effects: theming_compartment.reconfigure([]),
+				});
+			}
+
+			if (new_options.extensions) {
+				if (options.extensions !== new_options.extensions) {
+					editor.dispatch({
+						effects: extensions_compartment.reconfigure(new_options.extensions),
+					});
+				}
+			} else {
+				// Remove
+				editor.dispatch({
+					effects: extensions_compartment.reconfigure([]),
+				});
+			}
+
+			if (new_options.readonly) {
+				if (options.readonly !== new_options.readonly) {
+					editor.dispatch({
+						effects: readonly_compartment.reconfigure(
+							EditorView.editable.of(!new_options.readonly)
+						),
+					});
+				}
+			} else {
+				// Remove
+				editor.dispatch({
+					effects: readonly_compartment.reconfigure([]),
+				});
+			}
+
+			make_diagnostics(editor, new_options.diagnostics);
 
 			instanceStore?.set({
 				view: editor,
 				extensions: internal_extensions,
 				value,
 			});
+
+			options = new_options;
 		},
 
 		destroy() {
@@ -152,6 +259,42 @@ export const codemirror: Action<
 	};
 };
 
+async function get_setup(setup: Options['setup']) {
+	const { basicSetup, minimalSetup } = await import('codemirror');
+
+	if (typeof setup === 'undefined') return [];
+	if (setup === 'basic') return basicSetup;
+	if (setup === 'minimal') return minimalSetup;
+
+	throw new Error(
+		'`setup` can only be `basic` or `minimal`. If you wish to provide another setup, pass through `extensions` prop.'
+	);
+}
+
+async function get_lang(lang: Options['lang'], langMap: Options['langMap']) {
+	if (typeof lang === 'string') {
+		if (!langMap) throw new Error('`langMap` is required when `lang` is a string.');
+		if (!(lang in langMap)) throw new Error(`Language "${lang}" is not defined in \`langMap\`.`);
+
+		const lang_support = await langMap[lang]();
+
+		return lang_support;
+	}
+
+	if (typeof lang === 'undefined') return [];
+
+	return lang;
+}
+
+function get_theme(theme: Options['theme'], styles: Options['styles']): Extension[] {
+	// @ts-ignore
+	return [theme, styles && EditorView.theme(styles)].filter(Boolean);
+}
+
+async function get_tab_setting(useTabs: Options['useTabs'], tabSize: Options['tabSize'] = 2) {
+	return [EditorState.tabSize.of(tabSize), indentUnit.of(useTabs ? '\t' : ' '.repeat(tabSize))];
+}
+
 async function make_diagnostics(editor: EditorView, diagnostics: Options['diagnostics']) {
 	if (!diagnostics) return;
 
@@ -159,61 +302,6 @@ async function make_diagnostics(editor: EditorView, diagnostics: Options['diagno
 
 	const tr = diagnosticsModule.setDiagnostics(editor.state, diagnostics ?? []);
 	editor.dispatch(tr);
-}
-
-async function make_extensions({
-	lang,
-	langMap,
-	setup,
-	useTabs,
-	tabSize = 2,
-	theme,
-	styles,
-	extensions,
-	readonly,
-}: Options) {
-	const internal_extensions: Extension[] = [
-		keymap.of([...defaultKeymap, ...(useTabs ? [indentWithTab] : [])]),
-		EditorState.tabSize.of(tabSize),
-		indentUnit.of(useTabs ? '\t' : ' '.repeat(tabSize)),
-	];
-
-	await do_setup(internal_extensions, { setup });
-
-	if (lang) {
-		if (typeof lang === 'string') {
-			if (!langMap) throw new Error('`langMap` is required when `lang` is a string.');
-			if (!(lang in langMap)) throw new Error(`Language "${lang}" is not defined in \`langMap\`.`);
-
-			const lang_support = await langMap[lang]();
-			internal_extensions.push(lang_support);
-		} else {
-			internal_extensions.push(lang);
-		}
-	}
-
-	if (theme) internal_extensions.push(theme);
-	// @ts-ignore
-	if (styles) internal_extensions.push(EditorView.theme(styles));
-	if (readonly) internal_extensions.push(EditorView.editable.of(false));
-
-	return [internal_extensions, extensions ?? []];
-}
-
-async function do_setup(extensions: Extension[], { setup }: { setup: Options['setup'] }) {
-	if (setup) {
-		const cm = await import('codemirror');
-
-		if (setup === 'basic') {
-			extensions.push(cm.basicSetup);
-		} else if (setup === 'minimal') {
-			extensions.push(cm.minimalSetup);
-		} else {
-			throw new Error(
-				'`setup` can only be `basic` or `minimal`. If you wish to provide another setup, pass through `extensions` prop.'
-			);
-		}
-	}
 }
 
 /**

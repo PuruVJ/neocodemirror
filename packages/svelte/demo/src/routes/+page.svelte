@@ -42,12 +42,15 @@
 
 	let diagnostics = [];
 
+	let setup: 'minimal' | 'basic' | undefined = 'basic';
+
 	function change_pos() {
 		$store.view?.focus();
 		cursorPos = 0 + Math.floor(Math.random() * ($store.value?.length ?? 0));
 	}
 
 	$: console.log($store);
+	$: console.log(setup);
 </script>
 
 <button on:click={() => (selected = 'js')}>JS</button>
@@ -58,10 +61,16 @@
 
 <button on:click={change_pos}>Change cursor: {cursorPos}</button>
 
+<select bind:value={setup}>
+	<option value="minimal">Minimal</option>
+	<option value="basic">Basic</option>
+	<option value={undefined}>None</option>
+</select>
+
 <div
 	use:codemirror={{
 		value: options[selected].value,
-		setup: 'basic',
+		setup,
 		lang: selected,
 		langMap: {
 			js: () => import('@codemirror/lang-javascript').then((m) => m.javascript()),
