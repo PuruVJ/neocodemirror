@@ -1,5 +1,11 @@
 # @neocodemirror/svelte
 
+## 0.0.6
+
+### Patch Changes
+
+- Fine tuned reactivity
+
 ## 0.0.5
 
 ### Patch Changes
