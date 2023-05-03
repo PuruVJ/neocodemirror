@@ -76,7 +76,11 @@
 		langMap: {
 			js: () => import('@codemirror/lang-javascript').then((m) => m.javascript()),
 			svelte: () => import('@replit/codemirror-lang-svelte').then((m) => m.svelte()),
-			md: () => import('@codemirror/lang-markdown').then((m) => m.markdown()),
+			md: () =>
+				Promise.all([
+					import('@codemirror/lang-markdown'),
+					import('@codemirror/language-data'),
+				]).then(([{ markdown }, { languages }]) => markdown({ codeLanguages: languages })),
 		},
 		useTabs: true,
 		tabSize: 2,

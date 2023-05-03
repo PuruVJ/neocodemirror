@@ -21,6 +21,7 @@
 	"dependencies": {
 		"@codemirror/lang-javascript": "^6.1.7",
 		"@codemirror/lang-markdown": "^6.1.1",
+		"@codemirror/language-data": "^6.3.1",
 		"@codemirror/theme-one-dark": "^6.1.2",
 		"@neocodemirror/svelte": "workspace:*",
 		"@replit/codemirror-lang-svelte": "^6.0.0"
