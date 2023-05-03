@@ -265,8 +265,6 @@ type CodemirrorInstance = {
 	value: string | null;
 };
 
-let diagnosticsModule: typeof import('@codemirror/lint');
-
 export const withCodemirrorInstance = () =>
 	map<CodemirrorInstance>({
 		view: null,
@@ -289,7 +287,7 @@ export const codemirror = (
 
 	let fulfill_editor_initialized: (...args: any) => void;
 	let editor_initialized = new Promise((r) => (fulfill_editor_initialized = r));
-	let editor: EditorView;
+	let view: EditorView;
 
 	let internal_extensions: Extension[] = [];
 
@@ -323,7 +321,7 @@ export const codemirror = (
 	}
 
 	function handle_change(): void {
-		const new_value = editor.state.doc.toString();
+		const new_value = view.state.doc.toString();
 		if (new_value === value) return;
 
 		value = new_value;
@@ -338,7 +336,7 @@ export const codemirror = (
 	(async () => {
 		internal_extensions = await make_extensions(options);
 
-		editor = new EditorView({
+		view = new EditorView({
 			doc: value,
 			extensions: internal_extensions,
 			parent: node,
@@ -347,7 +345,7 @@ export const codemirror = (
 				head: options.cursorPos ?? 0,
 			},
 			dispatch(tr) {
-				editor.update([tr]);
+				view.update([tr]);
 
 				if (tr.docChanged) {
 					on_change();
@@ -355,10 +353,10 @@ export const codemirror = (
 			},
 		});
 
-		make_diagnostics(editor, diagnostics);
+		make_diagnostics(view, diagnostics);
 
 		instanceStore?.set({
-			view: editor,
+			view: view,
 			extensions: internal_extensions,
 			value,
 		});
@@ -372,30 +370,32 @@ export const codemirror = (
 
 			if (value !== new_options.value) {
 				value = new_options.value;
-				editor.dispatch({
+				view.dispatch({
 					changes: {
 						from: 0,
-						to: editor.state.doc.length,
+						to: view.state.doc.length,
 						insert: value,
 					},
 				});
 			}
 
+			console.time('reconfigure');
+
 			if (new_options.setup) {
 				if (options.setup !== new_options.setup) {
-					editor.dispatch({
+					view.dispatch({
 						effects: setup_compartment.reconfigure(await get_setup(new_options.setup)),
 					});
 				}
 			} else {
-				editor.dispatch({
+				view.dispatch({
 					effects: setup_compartment.reconfigure([]),
 				});
 			}
 
 			if (new_options.lang) {
 				if (options.lang !== new_options.lang) {
-					editor.dispatch({
+					view.dispatch({
 						effects: lang_compartment.reconfigure(
 							await get_lang(new_options.lang, new_options.langMap)
 						),
@@ -403,14 +403,14 @@ export const codemirror = (
 				}
 			} else {
 				// Remove
-				editor.dispatch({
+				view.dispatch({
 					effects: lang_compartment.reconfigure([]),
 				});
 			}
 
 			if (new_options.useTabs || new_options.tabSize) {
 				if (options.useTabs !== new_options.useTabs || options.tabSize !== new_options.tabSize) {
-					editor.dispatch({
+					view.dispatch({
 						effects: tabs_compartment.reconfigure(
 							await get_tab_setting(new_options.useTabs, new_options.tabSize)
 						),
@@ -418,14 +418,14 @@ export const codemirror = (
 				}
 			} else {
 				// Remove
-				editor.dispatch({
+				view.dispatch({
 					effects: tabs_compartment.reconfigure([await get_tab_setting(false, 2)]),
 				});
 			}
 
 			if (new_options.styles || new_options.theme) {
 				if (options.theme !== new_options.theme) {
-					editor.dispatch({
+					view.dispatch({
 						effects: theming_compartment.reconfigure(
 							get_theme(new_options.theme, new_options.styles)
 						),
@@ -433,27 +433,27 @@ export const codemirror = (
 				}
 			} else {
 				// Remove
-				editor.dispatch({
+				view.dispatch({
 					effects: theming_compartment.reconfigure([]),
 				});
 			}
 
 			if (new_options.extensions) {
 				if (options.extensions !== new_options.extensions) {
-					editor.dispatch({
+					view.dispatch({
 						effects: extensions_compartment.reconfigure(new_options.extensions),
 					});
 				}
 			} else {
 				// Remove
-				editor.dispatch({
+				view.dispatch({
 					effects: extensions_compartment.reconfigure([]),
 				});
 			}
 
 			if (new_options.readonly) {
 				if (options.readonly !== new_options.readonly) {
-					editor.dispatch({
+					view.dispatch({
 						effects: readonly_compartment.reconfigure(
 							EditorState.readOnly.of(new_options.readonly)
 						),
@@ -461,7 +461,7 @@ export const codemirror = (
 				}
 			} else {
 				// Remove
-				editor.dispatch({
+				view.dispatch({
 					effects: readonly_compartment.reconfigure([]),
 				});
 			}
@@ -470,7 +470,7 @@ export const codemirror = (
 				typeof new_options.cursorPos !== 'undefined' &&
 				options.cursorPos !== new_options.cursorPos
 			) {
-				editor.dispatch({
+				view.dispatch({
 					selection: {
 						anchor: new_options.cursorPos ?? 0,
 						head: new_options.cursorPos ?? 0,
@@ -478,10 +478,16 @@ export const codemirror = (
 				});
 			}
 
-			make_diagnostics(editor, new_options.diagnostics);
+			make_diagnostics(view, new_options.diagnostics);
+
+			console.timeEnd('reconfigure');
+
+			console.time('make_extensions');
+			internal_extensions = await make_extensions(new_options);
+			console.timeEnd('make_extensions');
 
 			instanceStore?.set({
-				view: editor,
+				view: view,
 				extensions: internal_extensions,
 				value,
 			});
@@ -491,7 +497,7 @@ export const codemirror = (
 
 		destroy() {
 			editor_initialized.then(() => {
-				editor?.destroy();
+				view?.destroy();
 			});
 		},
 	};
@@ -510,6 +516,8 @@ async function get_setup(setup: CodemirrorOptions['setup']) {
 }
 
 async function get_lang(lang: CodemirrorOptions['lang'], langMap: CodemirrorOptions['langMap']) {
+	if (typeof lang === 'undefined') return [];
+
 	if (typeof lang === 'string') {
 		if (!langMap) throw new Error('`langMap` is required when `lang` is a string.');
 		if (!(lang in langMap)) throw new Error(`Language "${lang}" is not defined in \`langMap\`.`);
@@ -518,8 +526,6 @@ async function get_lang(lang: CodemirrorOptions['lang'], langMap: CodemirrorOpti
 
 		return lang_support;
 	}
-
-	if (typeof lang === 'undefined') return [];
 
 	return lang;
 }
@@ -539,13 +545,13 @@ async function get_tab_setting(
 	return [EditorState.tabSize.of(tabSize), indentUnit.of(useTabs ? '\t' : ' '.repeat(tabSize))];
 }
 
-async function make_diagnostics(editor: EditorView, diagnostics: CodemirrorOptions['diagnostics']) {
+async function make_diagnostics(view: EditorView, diagnostics: CodemirrorOptions['diagnostics']) {
 	if (!diagnostics) return;
 
-	if (!diagnosticsModule) diagnosticsModule = await import('@codemirror/lint');
+	const { setDiagnostics } = await import('@codemirror/lint');
 
-	const tr = diagnosticsModule.setDiagnostics(editor.state, diagnostics ?? []);
-	editor.dispatch(tr);
+	const tr = setDiagnostics(view.state, diagnostics ?? []);
+	view.dispatch(tr);
 }
 
 /**
