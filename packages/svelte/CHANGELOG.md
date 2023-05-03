@@ -1,5 +1,11 @@
 # @neocodemirror/svelte
 
+## 0.0.8
+
+### Patch Changes
+
+- Fix types
+
 ## 0.0.7
 
 ### Patch Changes
