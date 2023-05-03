@@ -1,11 +1,11 @@
 import { defaultKeymap, indentWithTab } from '@codemirror/commands';
 import { indentUnit, type LanguageSupport } from '@codemirror/language';
+import type { Diagnostic } from '@codemirror/lint';
 import { Compartment, EditorState, type Extension } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import type { Properties as CSSProperties } from 'csstype';
 import { map, type MapStore } from 'nanostores';
 import type { ActionReturn } from 'svelte/action';
-import type { Diagnostic } from '@codemirror/lint';
 
 type MaybePromise<T> = T | Promise<T>;
 

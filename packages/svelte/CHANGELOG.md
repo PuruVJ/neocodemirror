@@ -1,5 +1,11 @@
 # @neocodemirror/svelte
 
+## 0.0.7
+
+### Patch Changes
+
+- cursorPos, inline JSDoc
+
 ## 0.0.6
 
 ### Patch Changes
