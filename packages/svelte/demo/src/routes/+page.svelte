@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Diagnostic } from '@codemirror/lint';
 	import { oneDark } from '@codemirror/theme-one-dark';
 	import { codemirror, withCodemirrorInstance } from '@neocodemirror/svelte';
 
@@ -40,7 +41,7 @@
 
 	let cursorPos = 40;
 
-	let diagnostics = [];
+	let diagnostics: Diagnostic[] = [];
 
 	let setup: 'minimal' | 'basic' | undefined = 'basic';
 
@@ -81,6 +82,7 @@
 		tabSize: 2,
 		theme: oneDark,
 		extensions: [],
+		cursorPos,
 		diagnostics: diagnostics,
 		instanceStore: store,
 	}}

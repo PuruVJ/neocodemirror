@@ -5,6 +5,7 @@ import { EditorView, keymap } from '@codemirror/view';
 import type { Properties as CSSProperties } from 'csstype';
 import { map, type MapStore } from 'nanostores';
 import type { ActionReturn } from 'svelte/action';
+import type { Diagnostic } from '@codemirror/lint';
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -16,20 +17,245 @@ type Styles = {
 	[val: string]: CSSProperties | Styles;
 };
 
-type Options = {
+export type CodemirrorOptions = {
+	/**
+	 * Value of the editor. Required
+	 *
+	 * @example
+	 * ```svelte
+	 * <div use:codemirror={{ value: `let code = 'wow'` }} />
+	 * ```
+	 */
 	value: string;
+
+	/**
+	 * The editor setup to apply. Can be either `basic` or `minimal`.
+	 * Defaults to no setup
+	 *
+	 * @default undefined
+	 *
+	 * @example
+	 * ```svelte
+	 * <div use:codemirror={{ setup: 'minimal' }} />
+	 * ```
+	 *
+	 * @see https://codemirror.net/docs/ref/#codemirror.basicSetup
+	 * @see https://codemirror.net/docs/ref/#codemirror.minimalSetup
+	 */
 	setup?: 'basic' | 'minimal';
+
+	/**
+	 * The language to use. Can be either a `LanguageSupport` or a string.
+	 * Defaults to none.
+	 *
+	 * When it is a `LanguageSupport`, it will be passed directly to codemirror. However, when it is a string, it will be used to get the language support from the `langMap` option.
+	 *
+	 * @see langMap option
+	 *
+	 * @default undefined
+	 *
+	 * @example
+	 * ```svelte
+	 * <script>
+	 * 	import { javascript } from '@codemirror/lang-javascript';
+	 * </script>
+	 *
+	 * <div use:codemirror={{ lang: javascript() }} />
+	 * ```
+	 *
+	 * @example
+	 * ```svelte
+	 * <script>
+	 * 	import { javascript } from '@codemirror/lang-javascript';
+	 * 	import { html } from '@codemirror/lang-html';
+	 * </script>
+	 *
+	 * <div
+	 *   use:codemirror={{
+	 *     lang: 'html',
+	 *     langMap: {
+	 *       html: () => html(),
+	 *       js: () => javascript({ typescript: true })
+	 *     }
+	 *   }}
+	 * />
+	 * ```
+	 */
 	lang?: LanguageSupport | string;
+
+	/**
+	 * A map of language names to functions that return a `LanguageSupport`. Can be promises too.
+	 *
+	 * A use case would be having an instance of codemirror
+	 * that switches its language based on file type chosen. In that case, combining with dynamic imports can be a great performance boost.
+	 *
+	 * @default undefined
+	 *
+	 * @example
+	 * ```svelte
+	 * <div
+	 *   use:codemirror={{
+	 *     lang: 'html',
+	 *     langMap: {
+	 *       html: () => import('@codemirror/lang-html').then((m) => m html()),
+	 *       js: () => import('@codemirror/lang-javascript').then((m) => m javascript({ typescript: true }))
+	 *     }
+	 *   }}
+	 * />
+	 * ```
+	 */
 	langMap?: Record<string, () => MaybePromise<LanguageSupport>>;
+
+	/**
+	 * Whether to use tabs or spaces. Defaults to spaces.
+	 *
+	 * @default false
+	 *
+	 * @example
+	 * ```svelte
+	 * <div use:codemirror={{ useTabs: true }} />
+	 * ```
+	 *
+	 * @see https://codemirror.net/docs/ref/#commands.indentWithTab
+	 */
 	useTabs?: boolean;
-	readonly?: boolean;
-	// cursorPos?: number;
-	styles?: Styles;
+
+	/**
+	 * The size of a tab in spaces. Defaults to 2.
+	 *
+	 * @default 2
+	 *
+	 * @see https://codemirror.net/docs/ref/#state.EditorState^tabSize
+	 *
+	 * @example
+	 * ```svelte
+	 * <div use:codemirror={{ tabSize: 4 }} />
+	 * ```
+	 */
 	tabSize?: number;
+
+	/**
+	 * Whether to open the editor in readonly mode. Note its different from `editable`, which allows you to focus cursor in editor, but not make any changes.
+	 * Defaults to false.
+	 *
+	 * @default false
+	 *
+	 * @example
+	 * ```svelte
+	 * <div use:codemirror={{ readonly: true }} />
+	 * ```
+	 *
+	 * @see https://codemirror.net/docs/ref/#state.EditorState^readOnly
+	 */
+	readonly?: boolean;
+
+	/**
+	 * Cursor Position. If not specified, defaults to the start of the document.
+	 *
+	 * @default undefined
+	 *
+	 * @example
+	 * ```svelte
+	 * <div use:codemirror={{ cursorPos: 10 }} />
+	 * ```
+	 */
+	cursorPos?: number;
+
+	/**
+	 * Styles to pass to EditorView.theme. Defaults to none.
+	 *
+	 * @default undefined
+	 *
+	 * @example
+	 * ```svelte
+	 * <div use:codemirror={{ styles: { '.cm-scroller': { overflow: 'hidden' } } }} />
+	 * ```
+	 *
+	 * @see https://codemirror.net/6/docs/ref/#view.EditorView^theme
+	 */
+	styles?: Styles;
+
+	/**
+	 * The theme to use. Of type `Extension`. Defaults to none.
+	 *
+	 * @default undefined
+	 *
+	 * @example
+	 * ```svelte
+	 * <script>
+	 * 	import { oneDark } from '@codemirror/theme-one-dark';
+	 * </script>
+	 *
+	 * <div use:codemirror={{ theme: oneDark }} />
+	 * ```
+	 */
 	theme?: Extension;
-	diagnostics?: import('@codemirror/lint').Diagnostic[];
+
+	/**
+	 * Diagnostics data to pass to the editor. Defaults to none.
+	 *
+	 * @default undefined
+	 *
+	 * @example
+	 * ```svelte
+	 * <script>
+	 * 	import { javascript } from '@codemirror/lang-javascript';
+	 *
+	 * 	const diagnostics = [
+	 * 		{
+	 * 			from: 0,
+	 * 			to: 10,
+	 * 			message: 'This is a diagnostic message',
+	 * 			severity: 'error'
+	 * 		}
+	 * 	];
+	 *
+	 * 	const lang = javascript({ typescript: true });
+	 * </script>
+	 *
+	 * <div use:codemirror={{ lang, diagnostics }} />
+	 * ```
+	 *
+	 * @see https://codemirror.net/docs/ref/#lint
+	 */
+	diagnostics?: Diagnostic[];
 	// decorations?: NeoCMDecorations;
+
+	/**
+	 * The extensions to use. Defaults to empty array.
+	 *
+	 * @default []
+	 *
+	 * @example
+	 * ```svelte
+	 * <script>
+	 * 	import { closeBrackets } from '@codemirror/autocomplete';
+	 * 	import { bracketMatching, codeFolding } from '@codemirror/language';
+	 * </script>
+	 *
+	 * <div use:codemirror={{ extensions: [closeBrackets(), bracketMatching(), codeFolding()] }} />
+	 * ```
+	 */
 	extensions?: Extension[];
+
+	/**
+	 * Instance store passed to the editor. This is created with `withCodemirrorInstance` function. It lets you track any and all state changes.
+	 *
+	 * @default undefined
+	 *
+	 * @example
+	 * ```svelte
+	 * <script>
+	 * 	import { withCodemirrorInstance } from '@neocodemirror/svelte';
+	 *
+	 * 	const instanceStore = withCodemirrorInstance();
+	 *
+	 * $: console.log($instanceStore);
+	 * </script>
+	 *
+	 * <div use:codemirror={{ instanceStore }} />
+	 * ```
+	 */
 	instanceStore?: MapStore<CodemirrorInstance>;
 };
 
@@ -50,9 +276,9 @@ export const withCodemirrorInstance = () =>
 
 export const codemirror = (
 	node: HTMLElement,
-	options: Options
+	options: CodemirrorOptions
 ): ActionReturn<
-	Options,
+	CodemirrorOptions,
 	{
 		'on:codemirror:change': (e: CustomEvent<string>) => void;
 	}
@@ -66,8 +292,6 @@ export const codemirror = (
 	let editor: EditorView;
 
 	let internal_extensions: Extension[] = [];
-
-	let update_from_state = false;
 
 	const setup_compartment = new Compartment();
 	const lang_compartment = new Compartment();
@@ -86,14 +310,14 @@ export const codemirror = (
 		styles,
 		extensions,
 		readonly,
-	}: Options) {
+	}: CodemirrorOptions) {
 		return [
 			keymap.of([...defaultKeymap, ...(useTabs ? [indentWithTab] : [])]),
 			setup_compartment.of((await get_setup(setup)) ?? []),
 			lang_compartment.of(await get_lang(lang, langMap)),
 			theming_compartment.of(get_theme(theme, styles)),
 			tabs_compartment.of(await get_tab_setting(useTabs, tabSize)),
-			readonly_compartment.of(EditorView.editable.of(!readonly)),
+			readonly_compartment.of(EditorState.readOnly.of(!readonly)),
 			extensions_compartment.of(extensions ?? []),
 		];
 	}
@@ -118,13 +342,15 @@ export const codemirror = (
 			doc: value,
 			extensions: internal_extensions,
 			parent: node,
+			selection: {
+				anchor: options.cursorPos ?? 0,
+				head: options.cursorPos ?? 0,
+			},
 			dispatch(tr) {
 				editor.update([tr]);
 
 				if (tr.docChanged) {
 					on_change();
-
-					update_from_state = true;
 				}
 			},
 		});
@@ -141,7 +367,7 @@ export const codemirror = (
 	})();
 
 	return {
-		async update(new_options: Options) {
+		async update(new_options: CodemirrorOptions) {
 			await editor_initialized;
 
 			if (value !== new_options.value) {
@@ -229,7 +455,7 @@ export const codemirror = (
 				if (options.readonly !== new_options.readonly) {
 					editor.dispatch({
 						effects: readonly_compartment.reconfigure(
-							EditorView.editable.of(!new_options.readonly)
+							EditorState.readOnly.of(new_options.readonly)
 						),
 					});
 				}
@@ -237,6 +463,18 @@ export const codemirror = (
 				// Remove
 				editor.dispatch({
 					effects: readonly_compartment.reconfigure([]),
+				});
+			}
+
+			if (
+				typeof new_options.cursorPos !== 'undefined' &&
+				options.cursorPos !== new_options.cursorPos
+			) {
+				editor.dispatch({
+					selection: {
+						anchor: new_options.cursorPos ?? 0,
+						head: new_options.cursorPos ?? 0,
+					},
 				});
 			}
 
@@ -259,7 +497,7 @@ export const codemirror = (
 	};
 };
 
-async function get_setup(setup: Options['setup']) {
+async function get_setup(setup: CodemirrorOptions['setup']) {
 	const { basicSetup, minimalSetup } = await import('codemirror');
 
 	if (typeof setup === 'undefined') return [];
@@ -271,7 +509,7 @@ async function get_setup(setup: Options['setup']) {
 	);
 }
 
-async function get_lang(lang: Options['lang'], langMap: Options['langMap']) {
+async function get_lang(lang: CodemirrorOptions['lang'], langMap: CodemirrorOptions['langMap']) {
 	if (typeof lang === 'string') {
 		if (!langMap) throw new Error('`langMap` is required when `lang` is a string.');
 		if (!(lang in langMap)) throw new Error(`Language "${lang}" is not defined in \`langMap\`.`);
@@ -286,16 +524,22 @@ async function get_lang(lang: Options['lang'], langMap: Options['langMap']) {
 	return lang;
 }
 
-function get_theme(theme: Options['theme'], styles: Options['styles']): Extension[] {
+function get_theme(
+	theme: CodemirrorOptions['theme'],
+	styles: CodemirrorOptions['styles']
+): Extension[] {
 	// @ts-ignore
 	return [theme, styles && EditorView.theme(styles)].filter(Boolean);
 }
 
-async function get_tab_setting(useTabs: Options['useTabs'], tabSize: Options['tabSize'] = 2) {
+async function get_tab_setting(
+	useTabs: CodemirrorOptions['useTabs'],
+	tabSize: CodemirrorOptions['tabSize'] = 2
+) {
 	return [EditorState.tabSize.of(tabSize), indentUnit.of(useTabs ? '\t' : ' '.repeat(tabSize))];
 }
 
-async function make_diagnostics(editor: EditorView, diagnostics: Options['diagnostics']) {
+async function make_diagnostics(editor: EditorView, diagnostics: CodemirrorOptions['diagnostics']) {
 	if (!diagnostics) return;
 
 	if (!diagnosticsModule) diagnosticsModule = await import('@codemirror/lint');
@@ -331,14 +575,4 @@ function debounce<T extends (...args: any[]) => any>(
 			timeout = null;
 		}
 	} as T;
-}
-
-function omit<T extends object, K extends (keyof T)[]>(obj: T, values: K): Omit<T, K[number]> {
-	const new_obj = Object.assign({}, obj);
-
-	for (const value of values) {
-		delete new_obj[value];
-	}
-
-	return new_obj;
 }
