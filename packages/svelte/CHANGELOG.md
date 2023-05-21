@@ -1,5 +1,13 @@
 # @neocodemirror/svelte
 
+## 0.0.9
+
+### Patch Changes
+
+- d0b789b: refactor: Entire extension update logic
+  feat: Autocomplete
+  fix: Break basic setup and minimal setup into their own files
+
 ## 0.0.8
 
 ### Patch Changes
