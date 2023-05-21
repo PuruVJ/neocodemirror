@@ -53,12 +53,13 @@
 		"svelte": "^3.58.0"
 	},
 	"peerDependencies": {
-		"@codemirror/commands": "^6.2.0",
-		"@codemirror/language": "^6.0.0",
-		"@codemirror/lint": "^6.0.0",
-		"@codemirror/state": "^6.0.0",
-		"@codemirror/view": "^6.0.0",
-		"codemirror": "^6.0.1"
+		"@codemirror/autocomplete": "^6.7.1",
+		"@codemirror/commands": "^6.2.4",
+		"@codemirror/language": "^6.7.0",
+		"@codemirror/lint": "^6.2.1",
+		"@codemirror/search": "^6.4.0",
+		"@codemirror/state": "^6.2.0",
+		"@codemirror/view": "^6.12.0"
 	},
 	"homepage": "https://github.com/PuruVJ/neocodemirror"
 }

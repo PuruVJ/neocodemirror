@@ -4,6 +4,7 @@ export default defineConfig({
 	entry: ['./src/index.ts'],
 	dts: { resolve: true },
 	treeshake: 'smallest',
+	clean: true,
 	external: [
 		'codemirror',
 		'@codemirror/view',
