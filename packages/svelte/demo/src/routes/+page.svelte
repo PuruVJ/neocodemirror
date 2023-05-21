@@ -37,8 +37,6 @@
 
 	let selected: keyof typeof options = 'svelte';
 
-	let isMarked = false;
-
 	let cursorPos = 40;
 
 	let diagnostics: Diagnostic[] = [];
@@ -82,6 +80,7 @@
 					import('@codemirror/language-data'),
 				]).then(([{ markdown }, { languages }]) => markdown({ codeLanguages: languages })),
 		},
+		autocomplete: false,
 		useTabs: true,
 		tabSize: 2,
 		theme: oneDark,
@@ -89,8 +88,11 @@
 		cursorPos,
 		diagnostics: diagnostics,
 		instanceStore: store,
+		onTextChange(value) {
+			console.log(value);
+			options[selected].value = value;
+		},
 	}}
-	on:codemirror:change={(e) => (options[selected].value = e.detail)}
 />
 
 <style>

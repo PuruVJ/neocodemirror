@@ -1,10 +1,19 @@
 import { defaultKeymap, indentWithTab } from '@codemirror/commands';
 import { indentUnit, type LanguageSupport } from '@codemirror/language';
 import type { Diagnostic } from '@codemirror/lint';
-import { Compartment, EditorState, type Extension } from '@codemirror/state';
+import {
+	Compartment,
+	EditorState,
+	StateEffect,
+	type Extension,
+	type Transaction,
+	type TransactionSpec,
+} from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import type { Properties as CSSProperties } from 'csstype';
 import { map, type MapStore } from 'nanostores';
+/** This module is forked from codemirror package for local use */
+
 import type { ActionReturn } from 'svelte/action';
 
 type MaybePromise<T> = T | Promise<T>;
@@ -17,7 +26,7 @@ type Styles = {
 	[val: string]: CSSProperties | Styles;
 };
 
-export type CodemirrorOptions = {
+export type NeoCodemirrorOptions = {
 	/**
 	 * Value of the editor. Required
 	 *
@@ -162,6 +171,18 @@ export type CodemirrorOptions = {
 	cursorPos?: number;
 
 	/**
+	 * Whether to autocomplete the language's basics
+	 *
+	 * @default true
+	 *
+	 * @example
+	 * ```svelte
+	 * <div use:codemirror={{ autocomplete: false }} />
+	 * ```
+	 */
+	autocomplete?: boolean | Parameters<typeof import('@codemirror/autocomplete').autocompletion>[0];
+
+	/**
 	 * Styles to pass to EditorView.theme. Defaults to none.
 	 *
 	 * @default undefined
@@ -257,6 +278,33 @@ export type CodemirrorOptions = {
 	 * ```
 	 */
 	instanceStore?: MapStore<CodemirrorInstance>;
+
+	/**
+	 * Triggers every time value of code editor is changed
+	 *
+	 * @default undefined
+	 *
+	 * @example
+	 * ```svelte
+	 * <div use:codemirror={{ onValueChange: (value) => console.log(value) }} />
+	 * ```
+	 */
+	onTextChange?: (value: string) => void;
+
+	/**
+	 * Triggers on any change in editor state. This includes changes in value, cursor position, diagnostics, etc.
+	 * The transaction object is exposed to the callback function.
+	 *
+	 * Note: If you are new to codemirror 6, this will trigger more than you probably think it will.
+	 *
+	 * @default undefined
+	 *
+	 * @example
+	 * ```svelte
+	 * <div use:codemirror={{ onChange: (transaction) => console.log(transaction.selection) }} />
+	 * ```
+	 */
+	onChange?: (e: Transaction) => void;
 };
 
 type CodemirrorInstance = {
@@ -274,11 +322,12 @@ export const withCodemirrorInstance = () =>
 
 export const codemirror = (
 	node: HTMLElement,
-	options: CodemirrorOptions
+	options: NeoCodemirrorOptions
 ): ActionReturn<
-	CodemirrorOptions,
+	NeoCodemirrorOptions,
 	{
-		'on:codemirror:change': (e: CustomEvent<string>) => void;
+		'on:codemirror:textChange'?: (e: CustomEvent<string>) => void;
+		'on:codemirror:change'?: (e: CustomEvent<Transaction>) => void;
 	}
 > => {
 	if (!options) throw new Error('No options provided. At least `value` is required.');
@@ -297,38 +346,42 @@ export const codemirror = (
 	const tabs_compartment = new Compartment();
 	const readonly_compartment = new Compartment();
 	const extensions_compartment = new Compartment();
+	const autocomplete_compartment = new Compartment();
 
-	async function make_extensions({
-		lang,
-		langMap,
-		setup,
-		useTabs,
-		tabSize = 2,
-		theme,
-		styles,
-		extensions,
-		readonly,
-	}: CodemirrorOptions) {
+	async function make_extensions(options: NeoCodemirrorOptions) {
 		return [
-			keymap.of([...defaultKeymap, ...(useTabs ? [indentWithTab] : [])]),
-			setup_compartment.of((await get_setup(setup)) ?? []),
-			lang_compartment.of(await get_lang(lang, langMap)),
-			theming_compartment.of(get_theme(theme, styles)),
-			tabs_compartment.of(await get_tab_setting(useTabs, tabSize)),
-			readonly_compartment.of(EditorState.readOnly.of(!readonly)),
-			extensions_compartment.of(extensions ?? []),
+			// User extensions matter the most, keep em on top
+			extensions_compartment.of(get_user_extensions(options)),
+
+			// Autocomplete may come built in with setup: basic, so always keep it above setup_compartment
+			autocomplete_compartment.of(await get_autocompletion(options)),
+
+			setup_compartment.of((await get_setup(options)) ?? []),
+
+			// Needs to be under `setup` because setup, if there, will add the indentWithTab
+			keymap.of([...defaultKeymap, ...(options.useTabs ? [indentWithTab] : [])]),
+			lang_compartment.of(await get_lang(options)),
+			theming_compartment.of(get_theme(options)),
+			tabs_compartment.of(await get_tab_setting(options)),
+			readonly_compartment.of(get_readonly(options)),
 		];
 	}
 
-	function handle_change(): void {
+	function handle_change(tr: Transaction): void {
 		const new_value = view.state.doc.toString();
 		if (new_value === value) return;
 
-		value = new_value;
+		if (new_value !== value) {
+			value = new_value;
 
-		node.dispatchEvent(new CustomEvent('codemirror:change', { detail: value }));
+			node.dispatchEvent(new CustomEvent('codemirror:textChange', { detail: value }));
+			options.onTextChange?.(value);
+		}
 
-		instanceStore?.setKey('value', value);
+		instanceStore?.set({ value, view, extensions: internal_extensions });
+
+		node.dispatchEvent(new CustomEvent('codemirror:change', { detail: tr }));
+		options.onChange?.(tr);
 	}
 
 	const on_change = debounce(handle_change, 50);
@@ -336,20 +389,22 @@ export const codemirror = (
 	(async () => {
 		internal_extensions = await make_extensions(options);
 
-		view = new EditorView({
+		const state = EditorState.create({
 			doc: value,
 			extensions: internal_extensions,
-			parent: node,
 			selection: {
 				anchor: options.cursorPos ?? 0,
 				head: options.cursorPos ?? 0,
 			},
+		});
+
+		view = new EditorView({
+			state,
+			parent: node,
 			dispatch(tr) {
 				view.update([tr]);
 
-				if (tr.docChanged) {
-					on_change();
-				}
+				on_change(tr);
 			},
 		});
 
@@ -365,126 +420,70 @@ export const codemirror = (
 	})();
 
 	return {
-		async update(new_options: CodemirrorOptions) {
+		async update(new_options: NeoCodemirrorOptions) {
 			await editor_initialized;
+
+			// The final transaction object to be applied
+			const transaction: TransactionSpec = {};
 
 			if (value !== new_options.value) {
 				value = new_options.value;
-				view.dispatch({
-					changes: {
-						from: 0,
-						to: view.state.doc.length,
-						insert: value,
-					},
-				});
-			}
 
-			console.time('reconfigure');
-
-			if (new_options.setup) {
-				if (options.setup !== new_options.setup) {
-					view.dispatch({
-						effects: setup_compartment.reconfigure(await get_setup(new_options.setup)),
-					});
-				}
-			} else {
-				view.dispatch({
-					effects: setup_compartment.reconfigure([]),
-				});
-			}
-
-			if (new_options.lang) {
-				if (options.lang !== new_options.lang) {
-					view.dispatch({
-						effects: lang_compartment.reconfigure(
-							await get_lang(new_options.lang, new_options.langMap)
-						),
-					});
-				}
-			} else {
-				// Remove
-				view.dispatch({
-					effects: lang_compartment.reconfigure([]),
-				});
-			}
-
-			if (new_options.useTabs || new_options.tabSize) {
-				if (options.useTabs !== new_options.useTabs || options.tabSize !== new_options.tabSize) {
-					view.dispatch({
-						effects: tabs_compartment.reconfigure(
-							await get_tab_setting(new_options.useTabs, new_options.tabSize)
-						),
-					});
-				}
-			} else {
-				// Remove
-				view.dispatch({
-					effects: tabs_compartment.reconfigure([await get_tab_setting(false, 2)]),
-				});
-			}
-
-			if (new_options.styles || new_options.theme) {
-				if (options.theme !== new_options.theme) {
-					view.dispatch({
-						effects: theming_compartment.reconfigure(
-							get_theme(new_options.theme, new_options.styles)
-						),
-					});
-				}
-			} else {
-				// Remove
-				view.dispatch({
-					effects: theming_compartment.reconfigure([]),
-				});
-			}
-
-			if (new_options.extensions) {
-				if (options.extensions !== new_options.extensions) {
-					view.dispatch({
-						effects: extensions_compartment.reconfigure(new_options.extensions),
-					});
-				}
-			} else {
-				// Remove
-				view.dispatch({
-					effects: extensions_compartment.reconfigure([]),
-				});
-			}
-
-			if (new_options.readonly) {
-				if (options.readonly !== new_options.readonly) {
-					view.dispatch({
-						effects: readonly_compartment.reconfigure(
-							EditorState.readOnly.of(new_options.readonly)
-						),
-					});
-				}
-			} else {
-				// Remove
-				view.dispatch({
-					effects: readonly_compartment.reconfigure([]),
-				});
+				transaction.changes = {
+					from: 0,
+					to: view.state.doc.length,
+					insert: value,
+				};
 			}
 
 			if (
 				typeof new_options.cursorPos !== 'undefined' &&
 				options.cursorPos !== new_options.cursorPos
 			) {
-				view.dispatch({
-					selection: {
-						anchor: new_options.cursorPos ?? 0,
-						head: new_options.cursorPos ?? 0,
-					},
-				});
+				transaction.selection = {
+					anchor: new_options.cursorPos ?? 0,
+					head: new_options.cursorPos ?? 0,
+				};
 			}
 
+			async function append_effect(
+				compartment: Compartment,
+				options_list: (keyof NeoCodemirrorOptions)[],
+				factory: (options: NeoCodemirrorOptions) => MaybePromise<any>
+			) {
+				transaction.effects = transaction.effects ?? [];
+
+				for (const option_name of options_list) {
+					const new_option = new_options[option_name];
+					const old_option = options[option_name];
+
+					const effects = transaction.effects as StateEffect<any>[];
+
+					if (typeof new_option !== 'undefined') {
+						if (new_option !== old_option) {
+							effects.push(compartment.reconfigure(await factory(new_options)));
+						}
+					} else {
+						return effects.push(compartment.reconfigure([]));
+					}
+				}
+			}
+
+			// Run them all in parallel
+			await Promise.all([
+				append_effect(setup_compartment, ['setup'], get_setup),
+				append_effect(lang_compartment, ['lang'], get_lang),
+				append_effect(tabs_compartment, ['useTabs', 'tabSize'], get_tab_setting),
+				append_effect(theming_compartment, ['theme'], get_theme),
+				append_effect(extensions_compartment, ['extensions'], get_user_extensions),
+				append_effect(readonly_compartment, ['readonly'], get_readonly),
+				append_effect(autocomplete_compartment, ['autocomplete'], get_autocompletion),
+			]);
+
+			view.dispatch(transaction);
 			make_diagnostics(view, new_options.diagnostics);
 
-			console.timeEnd('reconfigure');
-
-			console.time('make_extensions');
 			internal_extensions = await make_extensions(new_options);
-			console.timeEnd('make_extensions');
 
 			instanceStore?.set({
 				view: view,
@@ -496,27 +495,25 @@ export const codemirror = (
 		},
 
 		destroy() {
-			editor_initialized.then(() => {
-				view?.destroy();
-			});
+			editor_initialized.then(() => view?.destroy());
 		},
 	};
 };
 
-async function get_setup(setup: CodemirrorOptions['setup']) {
-	const { basicSetup, minimalSetup } = await import('codemirror');
+async function get_setup(options: NeoCodemirrorOptions) {
+	const { setup } = options;
 
-	if (typeof setup === 'undefined') return [];
-	if (setup === 'basic') return basicSetup;
-	if (setup === 'minimal') return minimalSetup;
+	if (!setup) return [];
+	if (setup === 'basic') return (await import('./basic-setup')).default(options);
+	if (setup === 'minimal') return (await import('./minimal-setup')).default(options);
 
 	throw new Error(
 		'`setup` can only be `basic` or `minimal`. If you wish to provide another setup, pass through `extensions` prop.'
 	);
 }
 
-async function get_lang(lang: CodemirrorOptions['lang'], langMap: CodemirrorOptions['langMap']) {
-	if (typeof lang === 'undefined') return [];
+async function get_lang({ lang, langMap }: NeoCodemirrorOptions) {
+	if (!lang) return [];
 
 	if (typeof lang === 'string') {
 		if (!langMap) throw new Error('`langMap` is required when `lang` is a string.');
@@ -530,22 +527,35 @@ async function get_lang(lang: CodemirrorOptions['lang'], langMap: CodemirrorOpti
 	return lang;
 }
 
-function get_theme(
-	theme: CodemirrorOptions['theme'],
-	styles: CodemirrorOptions['styles']
-): Extension[] {
+function get_theme({ theme, styles }: NeoCodemirrorOptions): Extension[] {
 	// @ts-ignore
 	return [theme, styles && EditorView.theme(styles)].filter(Boolean);
 }
 
-async function get_tab_setting(
-	useTabs: CodemirrorOptions['useTabs'],
-	tabSize: CodemirrorOptions['tabSize'] = 2
-) {
+async function get_tab_setting({ useTabs = false, tabSize = 2 }: NeoCodemirrorOptions) {
 	return [EditorState.tabSize.of(tabSize), indentUnit.of(useTabs ? '\t' : ' '.repeat(tabSize))];
 }
 
-async function make_diagnostics(view: EditorView, diagnostics: CodemirrorOptions['diagnostics']) {
+async function get_autocompletion({ autocomplete }: NeoCodemirrorOptions) {
+	if (!autocomplete) return [];
+
+	const { autocompletion } = await import('@codemirror/autocomplete');
+
+	return autocompletion(typeof autocomplete === 'object' && autocomplete ? autocomplete : {});
+}
+
+function get_readonly({ readonly }: NeoCodemirrorOptions) {
+	return EditorState.readOnly.of(!!readonly);
+}
+
+function get_user_extensions({ extensions }: NeoCodemirrorOptions) {
+	return extensions ?? [];
+}
+
+async function make_diagnostics(
+	view: EditorView,
+	diagnostics: NeoCodemirrorOptions['diagnostics']
+) {
 	if (!diagnostics) return;
 
 	const { setDiagnostics } = await import('@codemirror/lint');
