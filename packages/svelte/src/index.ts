@@ -5,22 +5,21 @@ import {
 	Compartment,
 	EditorState,
 	StateEffect,
+	StateField,
 	type Extension,
 	type Transaction,
 	type TransactionSpec,
 } from '@codemirror/state';
-import { EditorView, keymap } from '@codemirror/view';
+import { EditorView, keymap, Decoration, DecorationSet } from '@codemirror/view';
 import type { Properties as CSSProperties } from 'csstype';
 import { map, type MapStore } from 'nanostores';
-/** This module is forked from codemirror package for local use */
-
 import type { ActionReturn } from 'svelte/action';
 
 type MaybePromise<T> = T | Promise<T>;
 
-// type NeoCMDecorations = {
-// 	mark: { from: number; to: number; class?: string; attributes?: Record<string, string> };
-// };
+export type NeoCodemirrorDecorations = {
+	mark?: { from: number; to: number; class?: string; attributes?: Record<string, string> };
+};
 
 type Styles = {
 	[val: string]: CSSProperties | Styles;
@@ -181,6 +180,8 @@ export type NeoCodemirrorOptions = {
 	 * ```
 	 */
 	autocomplete?: boolean | Parameters<typeof import('@codemirror/autocomplete').autocompletion>[0];
+
+	decorations?: NeoCodemirrorDecorations;
 
 	/**
 	 * Styles to pass to EditorView.theme. Defaults to none.
@@ -371,7 +372,7 @@ export const codemirror = (
 		const new_value = view.state.doc.toString();
 		if (new_value === value) return;
 
-		if (new_value !== value) {
+		if (!is_equal(new_value, value)) {
 			value = new_value;
 
 			node.dispatchEvent(new CustomEvent('codemirror:textChange', { detail: value }));
@@ -409,6 +410,7 @@ export const codemirror = (
 		});
 
 		make_diagnostics(view, diagnostics);
+		make_decorations(view, options.decorations);
 
 		instanceStore?.set({
 			view: view,
@@ -426,7 +428,7 @@ export const codemirror = (
 			// The final transaction object to be applied
 			const transaction: TransactionSpec = {};
 
-			if (value !== new_options.value) {
+			if (!is_equal(value, new_options.value)) {
 				value = new_options.value;
 
 				transaction.changes = {
@@ -437,8 +439,8 @@ export const codemirror = (
 			}
 
 			if (
-				typeof new_options.cursorPos !== 'undefined' &&
-				options.cursorPos !== new_options.cursorPos
+				!is_undefined(new_options.cursorPos) &&
+				!is_equal(options.cursorPos, new_options.cursorPos)
 			) {
 				transaction.selection = {
 					anchor: new_options.cursorPos ?? 0,
@@ -459,8 +461,8 @@ export const codemirror = (
 
 					const effects = transaction.effects as StateEffect<any>[];
 
-					if (typeof new_option !== 'undefined') {
-						if (new_option !== old_option) {
+					if (!is_undefined(new_option)) {
+						if (!is_equal(new_option, old_option)) {
 							effects.push(compartment.reconfigure(await factory(new_options)));
 						}
 					} else {
@@ -482,6 +484,7 @@ export const codemirror = (
 
 			view.dispatch(transaction);
 			make_diagnostics(view, new_options.diagnostics);
+			make_decorations(view, new_options.decorations, options.decorations);
 
 			internal_extensions = await make_extensions(new_options);
 
@@ -500,10 +503,13 @@ export const codemirror = (
 	};
 };
 
+///////////////////// Getters /////////////////////
+
 async function get_setup(options: NeoCodemirrorOptions) {
 	const { setup } = options;
 
-	if (!setup) return [];
+	if (is_undefined(setup)) return [];
+
 	if (setup === 'basic') return (await import('./basic-setup')).default(options);
 	if (setup === 'minimal') return (await import('./minimal-setup')).default(options);
 
@@ -513,10 +519,10 @@ async function get_setup(options: NeoCodemirrorOptions) {
 }
 
 async function get_lang({ lang, langMap }: NeoCodemirrorOptions) {
-	if (!lang) return [];
+	if (is_undefined(lang)) return [];
 
 	if (typeof lang === 'string') {
-		if (!langMap) throw new Error('`langMap` is required when `lang` is a string.');
+		if (is_undefined(langMap)) throw new Error('`langMap` is required when `lang` is a string.');
 		if (!(lang in langMap)) throw new Error(`Language "${lang}" is not defined in \`langMap\`.`);
 
 		const lang_support = await langMap[lang]();
@@ -537,7 +543,7 @@ async function get_tab_setting({ useTabs = false, tabSize = 2 }: NeoCodemirrorOp
 }
 
 async function get_autocompletion({ autocomplete }: NeoCodemirrorOptions) {
-	if (!autocomplete) return [];
+	if (is_undefined(autocomplete)) return [];
 
 	const { autocompletion } = await import('@codemirror/autocomplete');
 
@@ -556,13 +562,86 @@ async function make_diagnostics(
 	view: EditorView,
 	diagnostics: NeoCodemirrorOptions['diagnostics']
 ) {
-	if (!diagnostics) return;
+	if (is_undefined(diagnostics)) return;
 
 	const { setDiagnostics } = await import('@codemirror/lint');
 
 	const tr = setDiagnostics(view.state, diagnostics ?? []);
 	view.dispatch(tr);
 }
+
+const add_mark_effect = StateEffect.define<{ from: number; to: number }>({
+	map: ({ from, to }, change) => ({ from: change.mapPos(from), to: change.mapPos(to) }),
+});
+
+const remove_mark_effect = StateEffect.define<{ from: number; to: number }>({
+	map: ({ from, to }, change) => ({ from: change.mapPos(from), to: change.mapPos(to) }),
+});
+
+function make_decorations(
+	view: EditorView,
+	decorations_compartment: Compartment,
+	new_decorations?: NeoCodemirrorDecorations,
+	old_decorations?: NeoCodemirrorDecorations
+) {
+	if (is_undefined(new_decorations)) return [];
+
+	let dec = Decoration.mark({ class: mark.class, attributes: mark.attributes });
+
+	const mark_field = StateField.define<DecorationSet>({
+		create() {
+			return Decoration.none;
+		},
+		update(underlines, tr) {
+			underlines = underlines.map(tr.changes);
+			for (let e of tr.effects)
+				if (e.is(add_mark_effect)) {
+					underlines = underlines.update({
+						add: [dec.range(e.value.from, e.value.to)],
+					});
+				} else if (e.is(remove_mark_effect)) {
+					underlines = underlines.update({
+						filter: (from, to) => !is_equal(e.value.from, from) && !is_equal(e.value.to, to),
+					});
+				}
+			return underlines;
+		},
+		provide: (f) => EditorView.decorations.from(f),
+	});
+
+	// Detect if any change from old_decorations
+	if (!is_undefined(old_decorations) && !is_undefined(old_decorations.mark)) {
+		const dec = Decoration.mark({
+			class: old_decorations.mark.class,
+			attributes: old_decorations.mark.attributes,
+		});
+
+		// Hmm remove these first
+		view.dispatch({
+			effects: [
+				decorations_compartment.reconfigure([mark_field]),
+				remove_mark_effect.of(dec.range(old_decorations.mark.from, old_decorations.mark.to)),
+			],
+		});
+	}
+
+	// Currently, only mark is supported
+	const { mark } = new_decorations;
+
+	if (is_undefined(mark)) return [];
+
+	if (is_undefined(mark.from) || is_undefined(mark.to))
+		throw new Error(`\`from\` and \`to\` are required for every item of \`mark\`.`);
+
+	view.dispatch({
+		effects: [
+			StateEffect.appendConfig.of([mark_field]),
+			add_mark_effect.of(dec.range(mark.from, mark.to)),
+		],
+	});
+}
+
+///////////////////// UTILS /////////////////////
 
 /**
  * Reduce calls to the passed function.
@@ -591,4 +670,17 @@ function debounce<T extends (...args: any[]) => any>(
 			timeout = null;
 		}
 	} as T;
+}
+
+const is_equal = <T>(val1: any, val2: T): val1 is T => val1 === val2;
+const is_array = <T>(val: unknown): val is T[] => Array.isArray(val);
+const is_empty_array = (val: unknown): boolean => is_array(val) && val.length === 0;
+const is_undefined = (val: unknown): val is undefined => typeof val === 'undefined';
+
+function is_equal_json(val1: any, val2: any): boolean {
+	try {
+		return JSON.stringify(val1) === JSON.stringify(val2);
+	} catch {
+		return false;
+	}
 }
