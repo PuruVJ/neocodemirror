@@ -1,6 +1,6 @@
 {
 	"name": "@neocodemirror/svelte",
-	"version": "0.0.9",
+	"version": "0.0.10",
 	"description": "Svelte Action to add codemirro to your apps 😉",
 	"main": "./dist/index.js",
 	"module": "./dist/index.js",

@@ -1,5 +1,11 @@
 # @neocodemirror/svelte
 
+## 0.0.10
+
+### Patch Changes
+
+- Allow autocomplete if autocomplete option not givenn
+
 ## 0.0.9
 
 ### Patch Changes
