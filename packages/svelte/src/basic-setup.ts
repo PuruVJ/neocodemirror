@@ -83,7 +83,7 @@ export default (options: import('./index').NeoCodemirrorOptions): Extension => [
 	bracketMatching(),
 	closeBrackets(),
 	EditorState.allowMultipleSelections.of(true),
-	options.autocomplete === true ? autocompletion() : [],
+	options.autocomplete !== false ? autocompletion() : [],
 	rectangularSelection(),
 	crosshairCursor(),
 	highlightActiveLine(),

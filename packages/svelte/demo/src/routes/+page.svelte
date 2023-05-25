@@ -80,7 +80,6 @@
 					import('@codemirror/language-data'),
 				]).then(([{ markdown }, { languages }]) => markdown({ codeLanguages: languages })),
 		},
-		autocomplete: false,
 		useTabs: true,
 		tabSize: 2,
 		theme: oneDark,
