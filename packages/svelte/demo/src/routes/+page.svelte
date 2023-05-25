@@ -17,6 +17,8 @@
 		},
 	};
 
+	let is_marked = true;
+
 	function make_diagnostics() {
 		const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a));
 
@@ -66,6 +68,8 @@
 	<option value={undefined}>None</option>
 </select>
 
+<button on:click={() => (is_marked = !is_marked)}>Toggle mark</button>
+
 <div
 	use:codemirror={{
 		value: options[selected].value,
@@ -81,6 +85,7 @@
 				]).then(([{ markdown }, { languages }]) => markdown({ codeLanguages: languages })),
 		},
 		autocomplete: false,
+		decorations: { mark: is_marked ? { from: 0, to: 30, class: 'cm-mark' } : undefined },
 		useTabs: true,
 		tabSize: 2,
 		theme: oneDark,
