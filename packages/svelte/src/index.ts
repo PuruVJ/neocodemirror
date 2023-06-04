@@ -305,6 +305,22 @@ export type NeoCodemirrorOptions = {
 	 * ```
 	 */
 	onChange?: (e: Transaction) => void;
+	/**
+	 * Options to config the behavior of the onChange/onTextChange callback. You can specify a kind
+	 * between throttle and debounce and a duration as a number of milliseconds. This prevent the callback from being called
+	 * too many times either by debouncing the change handler or by throttling it.
+	 * 
+	 * @default { kind: 'debounce', duration: 50 }
+	 * 
+	 * @example
+	 * ```svelte
+	 * <div use:codemirror={{ onChangeBehavior: { kind: 'throttle', duration: 350 } />
+	 * ```
+	 */
+	onChangeBehavior?: {
+		kind?: 'debounce' | 'throttle';
+		duration?: number;
+	}
 };
 
 type CodemirrorInstance = {
@@ -332,7 +348,12 @@ export const codemirror = (
 > => {
 	if (!options) throw new Error('No options provided. At least `value` is required.');
 
-	let { value, instanceStore, diagnostics } = options;
+	let { 
+		value,
+		instanceStore,
+		diagnostics,
+		onChangeBehavior = { kind: 'debounce', duration: 50 } 
+	} = options;
 
 	let fulfill_editor_initialized: (...args: any) => void;
 	let editor_initialized = new Promise((r) => (fulfill_editor_initialized = r));
@@ -384,7 +405,11 @@ export const codemirror = (
 		options.onChange?.(tr);
 	}
 
-	const on_change = debounce(handle_change, 50);
+	const { kind: behaviorKind = 'debounce', duration: behaviorDuration = 50 } = onChangeBehavior;
+
+	const on_change = behaviorKind === 'debounce' ? 
+		debounce(handle_change, behaviorDuration) : 
+		throttle(handle_change, behaviorDuration);
 
 	(async () => {
 		internal_extensions = await make_extensions(options);
@@ -565,7 +590,7 @@ async function make_diagnostics(
 }
 
 /**
- * Reduce calls to the passed function.
+ * Reduce calls to the passed function with debounce.
  *
  * @param func - Function to debounce.
  * @param threshold - The delay to avoid recalling the function.
@@ -590,5 +615,40 @@ function debounce<T extends (...args: any[]) => any>(
 			if (!execAsap) func.apply(self, args);
 			timeout = null;
 		}
+	} as T;
+}
+
+/**
+ * Reduce calls to the passed function with throttle.
+ *
+ * @param func - Function to throttle.
+ * @param threshold - The delay to avoid recalling the function.
+ */
+function throttle<T extends (...args: any[]) => any>(
+	func: T,
+	threshold: number,
+): T {
+	let lastArgs: Parameters<T>;
+	let shouldWait = false;
+	function timeoutFunction(self: any){
+		if(lastArgs){
+			func.apply(self, lastArgs);
+			setTimeout(timeoutFunction, threshold, self);
+			return;
+		}
+		shouldWait=false;
+	}
+
+	return function throttled(this: any, ...args: Parameters<T>): any {
+		const self = this;
+
+		if(shouldWait){
+			lastArgs=args;
+			return;
+		}
+
+		func.apply(self, args);
+		shouldWait = true;
+		setTimeout(timeoutFunction, threshold, self);
 	} as T;
 }
