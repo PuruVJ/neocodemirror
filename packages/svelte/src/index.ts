@@ -407,7 +407,7 @@ export const codemirror = (
 
 	const { kind: behaviorKind = 'debounce', duration: behaviorDuration = 50 } = onChangeBehavior;
 
-	const on_change = behaviorKind === 'debounce' ? 
+	let on_change = behaviorKind === 'debounce' ? 
 		debounce(handle_change, behaviorDuration) : 
 		throttle(handle_change, behaviorDuration);
 
@@ -515,6 +515,15 @@ export const codemirror = (
 				extensions: internal_extensions,
 				value,
 			});
+
+			const { kind: behaviorKind = 'debounce', duration: behaviorDuration = 50 } = 
+				new_options.onChangeBehavior ?? { kind: 'debounce', duration: 50 };
+		
+			if(options.onChangeBehavior?.kind !== behaviorKind || options.onChangeBehavior.duration !== behaviorDuration){
+				on_change = behaviorKind === 'debounce' ? 
+					debounce(handle_change, behaviorDuration) : 
+					throttle(handle_change, behaviorDuration);
+			}
 
 			options = new_options;
 		},
