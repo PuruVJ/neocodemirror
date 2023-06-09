@@ -1,5 +1,11 @@
 # @neocodemirror/svelte
 
+## 0.0.12
+
+### Patch Changes
+
+- Fix build output
+
 ## 0.0.11
 
 ### Patch Changes
