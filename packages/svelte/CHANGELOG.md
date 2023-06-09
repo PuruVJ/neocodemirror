@@ -1,5 +1,11 @@
 # @neocodemirror/svelte
 
+## 0.0.11
+
+### Patch Changes
+
+- a399a40: added ability to customize the onChange behavior by choosing between throttle and debounce and by specifying a duration
+
 ## 0.0.10
 
 ### Patch Changes
