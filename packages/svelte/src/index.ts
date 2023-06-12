@@ -637,27 +637,28 @@ function throttle<T extends (...args: any[]) => any>(
 	func: T,
 	threshold: number,
 ): T {
-	let lastArgs: Parameters<T>;
-	let shouldWait = false;
-	function timeoutFunction(self: any){
-		if(lastArgs){
-			func.apply(self, lastArgs);
-			setTimeout(timeoutFunction, threshold, self);
+	let last_args: Parameters<T>|null;
+	let should_wait = false;
+	function timeout_function(self: any){
+		if(last_args){
+			func.apply(self, last_args);
+			setTimeout(timeout_function, threshold, self);
+			last_args = null;
 			return;
 		}
-		shouldWait=false;
+		should_wait=false;
 	}
 
 	return function throttled(this: any, ...args: Parameters<T>): any {
 		const self = this;
 
-		if(shouldWait){
-			lastArgs=args;
+		if(should_wait){
+			last_args=args;
 			return;
 		}
 
 		func.apply(self, args);
-		shouldWait = true;
-		setTimeout(timeoutFunction, threshold, self);
+		should_wait = true;
+		setTimeout(timeout_function, threshold, self);
 	} as T;
 }
