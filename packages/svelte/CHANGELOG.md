@@ -1,5 +1,11 @@
 # @neocodemirror/svelte
 
+## 0.0.13
+
+### Patch Changes
+
+- 1cb49a3: delete last_args after the throttled function gets called to avoid infinitely call the function
+
 ## 0.0.12
 
 ### Patch Changes
