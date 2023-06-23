@@ -67,6 +67,12 @@
 </select>
 
 <div
+	on:codemirror:documentChanged={() => {
+		console.log('document changed on div');
+	}}
+	on:codemirror:documentChanging={() => {
+		console.log('document changing on div');
+	}}
 	use:codemirror={{
 		value: options[selected].value,
 		setup,
@@ -90,6 +96,13 @@
 		onTextChange(value) {
 			console.log(value);
 			options[selected].value = value;
+		},
+		documentId: selected,
+		onDocumentChanged() {
+			console.log('document changed in options');
+		},
+		onDocumentChanging() {
+			console.log('document changing in options');
 		},
 	}}
 />

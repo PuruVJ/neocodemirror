@@ -1,4 +1,4 @@
-import { defaultKeymap, indentWithTab } from '@codemirror/commands';
+import { defaultKeymap, historyField, indentWithTab } from '@codemirror/commands';
 import { indentUnit, type LanguageSupport } from '@codemirror/language';
 import type { Diagnostic } from '@codemirror/lint';
 import {
@@ -309,9 +309,9 @@ export type NeoCodemirrorOptions = {
 	 * Options to config the behavior of the onChange/onTextChange callback. You can specify a kind
 	 * between throttle and debounce and a duration as a number of milliseconds. This prevent the callback from being called
 	 * too many times either by debouncing the change handler or by throttling it.
-	 * 
+	 *
 	 * @default { kind: 'debounce', duration: 50 }
-	 * 
+	 *
 	 * @example
 	 * ```svelte
 	 * <div use:codemirror={{ onChangeBehavior: { kind: 'throttle', duration: 350 } />
@@ -320,7 +320,31 @@ export type NeoCodemirrorOptions = {
 	onChangeBehavior?: {
 		kind?: 'debounce' | 'throttle';
 		duration?: number;
-	}
+	};
+	/**
+	 * If present it will make the codemirror instance enter document mode. This means that whenever
+	 * the documentId changes the state of the codemirror instance is reset and stored in a map.
+	 * If there's a stored state for the new documentId it will be restored. This allows, for example
+	 * to keep different history for different documents.
+	 *
+	 * @default undefined
+	 *
+	 * @example
+	 * ```svelte
+	 * <div use:codemirror={{ documentId: "file.txt" />
+	 * ```
+	 */
+	documentId?: string;
+	/**
+	 * This callback is called before the old codemirror state is pushed to the instance. This
+	 * allows you to store some non serializable state (some extensions may not properly use facets)
+	 * that you can than restore in the onDocumentChanged callback.
+	 */
+	onDocumentChanging?: () => void;
+	/**
+	 * This callback is called right after the state for the new document has been updated.
+	 */
+	onDocumentChanged?: () => void;
 };
 
 type CodemirrorInstance = {
@@ -344,16 +368,21 @@ export const codemirror = (
 	{
 		'on:codemirror:textChange'?: (e: CustomEvent<string>) => void;
 		'on:codemirror:change'?: (e: CustomEvent<Transaction>) => void;
+		'on:codemirror:documentChanging'?: (e: CustomEvent<void>) => void;
+		'on:codemirror:documentChanged'?: (e: CustomEvent<void>) => void;
 	}
 > => {
 	if (!options) throw new Error('No options provided. At least `value` is required.');
 
-	let { 
+	let {
 		value,
 		instanceStore,
 		diagnostics,
-		onChangeBehavior = { kind: 'debounce', duration: 50 } 
+		onChangeBehavior = { kind: 'debounce', duration: 50 },
+		documentId,
 	} = options;
+
+	const EDITOR_STATE_MAP = new Map<string, string>();
 
 	let fulfill_editor_initialized: (...args: any) => void;
 	let editor_initialized = new Promise((r) => (fulfill_editor_initialized = r));
@@ -394,22 +423,22 @@ export const codemirror = (
 
 		if (new_value !== value) {
 			value = new_value;
-
-			node.dispatchEvent(new CustomEvent('codemirror:textChange', { detail: value }));
+			dispatch_event(node, 'codemirror:textChange', value);
 			options.onTextChange?.(value);
 		}
 
 		instanceStore?.set({ value, view, extensions: internal_extensions });
 
-		node.dispatchEvent(new CustomEvent('codemirror:change', { detail: tr }));
+		dispatch_event(node, 'codemirror:change', tr);
 		options.onChange?.(tr);
 	}
 
 	const { kind: behaviorKind = 'debounce', duration: behaviorDuration = 50 } = onChangeBehavior;
 
-	let on_change = behaviorKind === 'debounce' ? 
-		debounce(handle_change, behaviorDuration) : 
-		throttle(handle_change, behaviorDuration);
+	let on_change =
+		behaviorKind === 'debounce'
+			? debounce(handle_change, behaviorDuration)
+			: throttle(handle_change, behaviorDuration);
 
 	(async () => {
 		internal_extensions = await make_extensions(options);
@@ -450,7 +479,6 @@ export const codemirror = (
 
 			// The final transaction object to be applied
 			const transaction: TransactionSpec = {};
-
 			if (value !== new_options.value) {
 				value = new_options.value;
 
@@ -505,10 +533,48 @@ export const codemirror = (
 				append_effect(autocomplete_compartment, ['autocomplete'], get_autocompletion),
 			]);
 
+			// we need to get the state before the transaction apply because the
+			// transaction also changes the value
+			const pre_transaction_state = view.state.toJSON({ history: historyField });
+
 			view.dispatch(transaction);
 			make_diagnostics(view, new_options.diagnostics);
 
 			internal_extensions = await make_extensions(new_options);
+
+			if (options.documentId && options.documentId !== new_options.documentId) {
+				// keep track of the old state
+				EDITOR_STATE_MAP.set(options.documentId, pre_transaction_state);
+				// if there's a new documentId
+				if (new_options.documentId) {
+					// we recover the state from the map
+					const old_state = EDITOR_STATE_MAP.get(new_options.documentId);
+					// we dispatch the events for document changing, this allows
+					// the user to store non serializable state (looking at you vim)
+					dispatch_event(node, 'codemirror:documentChanging');
+					options.onDocumentChanging?.();
+					// we set the state...if there's the old state we convert it from
+					// json and add back the history field otherwise we create a brand
+					// new state to wipe the history of the old one
+					view.setState(
+						old_state
+							? EditorState.fromJSON(
+									old_state,
+									{ extensions: internal_extensions, doc: new_options.value },
+									{
+										history: historyField,
+									}
+							  )
+							: EditorState.create({
+									doc: new_options.value,
+									extensions: internal_extensions,
+							  })
+					);
+					// we dispatch the events for the documentChanged
+					dispatch_event(node, 'codemirror:documentChanged');
+					options.onDocumentChanged?.();
+				}
+			}
 
 			instanceStore?.set({
 				view: view,
@@ -516,13 +582,17 @@ export const codemirror = (
 				value,
 			});
 
-			const { kind: behaviorKind = 'debounce', duration: behaviorDuration = 50 } = 
+			const { kind: behaviorKind = 'debounce', duration: behaviorDuration = 50 } =
 				new_options.onChangeBehavior ?? { kind: 'debounce', duration: 50 };
-		
-			if(options.onChangeBehavior?.kind !== behaviorKind || options.onChangeBehavior.duration !== behaviorDuration){
-				on_change = behaviorKind === 'debounce' ? 
-					debounce(handle_change, behaviorDuration) : 
-					throttle(handle_change, behaviorDuration);
+
+			if (
+				options.onChangeBehavior?.kind !== behaviorKind ||
+				options.onChangeBehavior.duration !== behaviorDuration
+			) {
+				on_change =
+					behaviorKind === 'debounce'
+						? debounce(handle_change, behaviorDuration)
+						: throttle(handle_change, behaviorDuration);
 			}
 
 			options = new_options;
@@ -633,27 +703,24 @@ function debounce<T extends (...args: any[]) => any>(
  * @param func - Function to throttle.
  * @param threshold - The delay to avoid recalling the function.
  */
-function throttle<T extends (...args: any[]) => any>(
-	func: T,
-	threshold: number,
-): T {
-	let last_args: Parameters<T>|null;
+function throttle<T extends (...args: any[]) => any>(func: T, threshold: number): T {
+	let last_args: Parameters<T> | null;
 	let should_wait = false;
-	function timeout_function(self: any){
-		if(last_args){
+	function timeout_function(self: any) {
+		if (last_args) {
 			func.apply(self, last_args);
 			setTimeout(timeout_function, threshold, self);
 			last_args = null;
 			return;
 		}
-		should_wait=false;
+		should_wait = false;
 	}
 
 	return function throttled(this: any, ...args: Parameters<T>): any {
 		const self = this;
 
-		if(should_wait){
-			last_args=args;
+		if (should_wait) {
+			last_args = args;
 			return;
 		}
 
@@ -661,4 +728,8 @@ function throttle<T extends (...args: any[]) => any>(
 		should_wait = true;
 		setTimeout(timeout_function, threshold, self);
 	} as T;
+}
+
+function dispatch_event(node: Node, event: string, detail?: unknown) {
+	node.dispatchEvent(new CustomEvent(event, detail ? { detail } : undefined));
 }
