@@ -9,11 +9,9 @@ import {
 	type Transaction,
 	type TransactionSpec,
 } from '@codemirror/state';
-import { EditorView, keymap } from '@codemirror/view';
+import { EditorView, ViewUpdate, keymap } from '@codemirror/view';
 import type { Properties as CSSProperties } from 'csstype';
 import { map, type MapStore } from 'nanostores';
-/** This module is forked from codemirror package for local use */
-
 import type { ActionReturn } from 'svelte/action';
 
 type MaybePromise<T> = T | Promise<T>;
@@ -280,32 +278,6 @@ export type NeoCodemirrorOptions = {
 	instanceStore?: MapStore<CodemirrorInstance>;
 
 	/**
-	 * Triggers every time value of code editor is changed
-	 *
-	 * @default undefined
-	 *
-	 * @example
-	 * ```svelte
-	 * <div use:codemirror={{ onValueChange: (value) => console.log(value) }} />
-	 * ```
-	 */
-	onTextChange?: (value: string) => void;
-
-	/**
-	 * Triggers on any change in editor state. This includes changes in value, cursor position, diagnostics, etc.
-	 * The transaction object is exposed to the callback function.
-	 *
-	 * Note: If you are new to codemirror 6, this will trigger more than you probably think it will.
-	 *
-	 * @default undefined
-	 *
-	 * @example
-	 * ```svelte
-	 * <div use:codemirror={{ onChange: (transaction) => console.log(transaction.selection) }} />
-	 * ```
-	 */
-	onChange?: (e: Transaction) => void;
-	/**
 	 * Options to config the behavior of the onChange/onTextChange callback. You can specify a kind
 	 * between throttle and debounce and a duration as a number of milliseconds. This prevent the callback from being called
 	 * too many times either by debouncing the change handler or by throttling it.
@@ -335,16 +307,6 @@ export type NeoCodemirrorOptions = {
 	 * ```
 	 */
 	documentId?: string;
-	/**
-	 * This callback is called before the old codemirror state is pushed to the instance. This
-	 * allows you to store some non serializable state (some extensions may not properly use facets)
-	 * that you can than restore in the onDocumentChanged callback.
-	 */
-	onDocumentChanging?: () => void;
-	/**
-	 * This callback is called right after the state for the new document has been updated.
-	 */
-	onDocumentChanged?: () => void;
 };
 
 type CodemirrorInstance = {
@@ -372,7 +334,7 @@ export const codemirror = (
 		'on:codemirror:documentChanged'?: (e: CustomEvent<void>) => void;
 	}
 > => {
-	if (!options) throw new Error('No options provided. At least `value` is required.');
+	if (is_undefined(options)) throw new Error('No options provided. At least `value` is required.');
 
 	let {
 		value,
@@ -398,8 +360,11 @@ export const codemirror = (
 	const extensions_compartment = new Compartment();
 	const autocomplete_compartment = new Compartment();
 
+	const watcher = EditorView.updateListener.of((view_update) => on_change(view_update));
+
 	async function make_extensions(options: NeoCodemirrorOptions) {
 		return [
+			watcher,
 			// User extensions matter the most, keep em on top
 			extensions_compartment.of(get_user_extensions(options)),
 
@@ -417,20 +382,17 @@ export const codemirror = (
 		];
 	}
 
-	function handle_change(tr: Transaction): void {
+	function handle_change(view_update: ViewUpdate): void {
 		const new_value = view.state.doc.toString();
-		if (new_value === value) return;
 
-		if (new_value !== value) {
+		if (!is_equal(new_value, value)) {
 			value = new_value;
 			dispatch_event(node, 'codemirror:textChange', value);
-			options.onTextChange?.(value);
 		}
 
 		instanceStore?.set({ value, view, extensions: internal_extensions });
 
-		dispatch_event(node, 'codemirror:change', tr);
-		options.onChange?.(tr);
+		dispatch_event(node, 'codemirror:change', view_update);
 	}
 
 	const { kind: behaviorKind = 'debounce', duration: behaviorDuration = 50 } = onChangeBehavior;
@@ -455,14 +417,12 @@ export const codemirror = (
 		view = new EditorView({
 			state,
 			parent: node,
-			dispatch(tr) {
-				view.update([tr]);
-
-				on_change(tr);
-			},
 		});
 
 		make_diagnostics(view, diagnostics);
+
+		// Focus the editor if the cursor position is set
+		if (!is_undefined(options.cursorPos)) view.focus();
 
 		instanceStore?.set({
 			view: view,
@@ -479,7 +439,8 @@ export const codemirror = (
 
 			// The final transaction object to be applied
 			const transaction: TransactionSpec = {};
-			if (value !== new_options.value) {
+
+			if (!is_equal(value, new_options.value)) {
 				value = new_options.value;
 
 				transaction.changes = {
@@ -490,13 +451,15 @@ export const codemirror = (
 			}
 
 			if (
-				typeof new_options.cursorPos !== 'undefined' &&
-				options.cursorPos !== new_options.cursorPos
+				!is_undefined(new_options.cursorPos) &&
+				!is_equal(options.cursorPos, new_options.cursorPos)
 			) {
 				transaction.selection = {
 					anchor: new_options.cursorPos ?? 0,
 					head: new_options.cursorPos ?? 0,
 				};
+
+				view.focus();
 			}
 
 			async function append_effect(
@@ -552,7 +515,6 @@ export const codemirror = (
 					// we dispatch the events for document changing, this allows
 					// the user to store non serializable state (looking at you vim)
 					dispatch_event(node, 'codemirror:documentChanging');
-					options.onDocumentChanging?.();
 					// we set the state...if there's the old state we convert it from
 					// json and add back the history field otherwise we create a brand
 					// new state to wipe the history of the old one
@@ -572,7 +534,6 @@ export const codemirror = (
 					);
 					// we dispatch the events for the documentChanged
 					dispatch_event(node, 'codemirror:documentChanged');
-					options.onDocumentChanged?.();
 				}
 			}
 
@@ -586,8 +547,8 @@ export const codemirror = (
 				new_options.onChangeBehavior ?? { kind: 'debounce', duration: 50 };
 
 			if (
-				options.onChangeBehavior?.kind !== behaviorKind ||
-				options.onChangeBehavior.duration !== behaviorDuration
+				!is_equal(options.onChangeBehavior?.kind, behaviorKind) ||
+				!is_equal(options.onChangeBehavior?.duration, behaviorDuration)
 			) {
 				on_change =
 					behaviorKind === 'debounce'
@@ -607,7 +568,7 @@ export const codemirror = (
 async function get_setup(options: NeoCodemirrorOptions) {
 	const { setup } = options;
 
-	if (!setup) return [];
+	if (is_undefined(setup)) return [];
 	if (setup === 'basic') return (await import('./basic-setup')).default(options);
 	if (setup === 'minimal') return (await import('./minimal-setup')).default(options);
 
@@ -617,7 +578,7 @@ async function get_setup(options: NeoCodemirrorOptions) {
 }
 
 async function get_lang({ lang, langMap }: NeoCodemirrorOptions) {
-	if (!lang) return [];
+	if (is_undefined(lang)) return [];
 
 	if (typeof lang === 'string') {
 		if (!langMap) throw new Error('`langMap` is required when `lang` is a string.');
@@ -641,7 +602,7 @@ async function get_tab_setting({ useTabs = false, tabSize = 2 }: NeoCodemirrorOp
 }
 
 async function get_autocompletion({ autocomplete }: NeoCodemirrorOptions) {
-	if (!autocomplete) return [];
+	if (is_undefined(autocomplete)) return [];
 
 	const { autocompletion } = await import('@codemirror/autocomplete');
 
@@ -660,13 +621,16 @@ async function make_diagnostics(
 	view: EditorView,
 	diagnostics: NeoCodemirrorOptions['diagnostics']
 ) {
-	if (!diagnostics) return;
+	if (is_undefined(diagnostics)) return;
 
 	const { setDiagnostics } = await import('@codemirror/lint');
 
 	const tr = setDiagnostics(view.state, diagnostics ?? []);
 	view.dispatch(tr);
 }
+
+const is_equal = (a: unknown, b: unknown) => a === b;
+const is_undefined = (a: any): a is undefined => typeof a === 'undefined';
 
 /**
  * Reduce calls to the passed function with debounce.
