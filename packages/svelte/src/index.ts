@@ -404,7 +404,7 @@ export const codemirror = (
 		make_diagnostics(view, diagnostics);
 
 		// Focus the editor if the cursor position is set
-		if (options.cursorPos) view.focus();
+		if (!is_undefined(options.cursorPos)) view.focus();
 
 		instanceStore?.set({
 			view: view,
