@@ -37,7 +37,7 @@
 
 	let selected: keyof typeof options = 'svelte';
 
-	let cursorPos = 40;
+	let cursorPos = 0;
 
 	let diagnostics: Diagnostic[] = [];
 
@@ -87,10 +87,10 @@
 		cursorPos,
 		diagnostics: diagnostics,
 		instanceStore: store,
-		onTextChange(value) {
-			console.log(value);
-			options[selected].value = value;
-		},
+	}}
+	on:codemirror:textChange={({ detail: value }) => {
+		console.log(value);
+		options[selected].value = value;
 	}}
 />
 

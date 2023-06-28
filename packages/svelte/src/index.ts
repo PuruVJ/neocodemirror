@@ -9,11 +9,9 @@ import {
 	type Transaction,
 	type TransactionSpec,
 } from '@codemirror/state';
-import { EditorView, keymap } from '@codemirror/view';
+import { EditorView, ViewUpdate, keymap } from '@codemirror/view';
 import type { Properties as CSSProperties } from 'csstype';
 import { map, type MapStore } from 'nanostores';
-/** This module is forked from codemirror package for local use */
-
 import type { ActionReturn } from 'svelte/action';
 
 type MaybePromise<T> = T | Promise<T>;
@@ -280,38 +278,12 @@ export type NeoCodemirrorOptions = {
 	instanceStore?: MapStore<CodemirrorInstance>;
 
 	/**
-	 * Triggers every time value of code editor is changed
-	 *
-	 * @default undefined
-	 *
-	 * @example
-	 * ```svelte
-	 * <div use:codemirror={{ onValueChange: (value) => console.log(value) }} />
-	 * ```
-	 */
-	onTextChange?: (value: string) => void;
-
-	/**
-	 * Triggers on any change in editor state. This includes changes in value, cursor position, diagnostics, etc.
-	 * The transaction object is exposed to the callback function.
-	 *
-	 * Note: If you are new to codemirror 6, this will trigger more than you probably think it will.
-	 *
-	 * @default undefined
-	 *
-	 * @example
-	 * ```svelte
-	 * <div use:codemirror={{ onChange: (transaction) => console.log(transaction.selection) }} />
-	 * ```
-	 */
-	onChange?: (e: Transaction) => void;
-	/**
 	 * Options to config the behavior of the onChange/onTextChange callback. You can specify a kind
 	 * between throttle and debounce and a duration as a number of milliseconds. This prevent the callback from being called
 	 * too many times either by debouncing the change handler or by throttling it.
-	 * 
+	 *
 	 * @default { kind: 'debounce', duration: 50 }
-	 * 
+	 *
 	 * @example
 	 * ```svelte
 	 * <div use:codemirror={{ onChangeBehavior: { kind: 'throttle', duration: 350 } />
@@ -320,7 +292,7 @@ export type NeoCodemirrorOptions = {
 	onChangeBehavior?: {
 		kind?: 'debounce' | 'throttle';
 		duration?: number;
-	}
+	};
 };
 
 type CodemirrorInstance = {
@@ -346,13 +318,13 @@ export const codemirror = (
 		'on:codemirror:change'?: (e: CustomEvent<Transaction>) => void;
 	}
 > => {
-	if (!options) throw new Error('No options provided. At least `value` is required.');
+	if (is_undefined(options)) throw new Error('No options provided. At least `value` is required.');
 
-	let { 
+	let {
 		value,
 		instanceStore,
 		diagnostics,
-		onChangeBehavior = { kind: 'debounce', duration: 50 } 
+		onChangeBehavior = { kind: 'debounce', duration: 50 },
 	} = options;
 
 	let fulfill_editor_initialized: (...args: any) => void;
@@ -369,8 +341,11 @@ export const codemirror = (
 	const extensions_compartment = new Compartment();
 	const autocomplete_compartment = new Compartment();
 
+	const watcher = EditorView.updateListener.of((view_update) => on_change(view_update));
+
 	async function make_extensions(options: NeoCodemirrorOptions) {
 		return [
+			watcher,
 			// User extensions matter the most, keep em on top
 			extensions_compartment.of(get_user_extensions(options)),
 
@@ -388,28 +363,26 @@ export const codemirror = (
 		];
 	}
 
-	function handle_change(tr: Transaction): void {
+	function handle_change(view_update: ViewUpdate): void {
 		const new_value = view.state.doc.toString();
-		if (new_value === value) return;
 
-		if (new_value !== value) {
+		if (!is_equal(new_value, value)) {
 			value = new_value;
 
 			node.dispatchEvent(new CustomEvent('codemirror:textChange', { detail: value }));
-			options.onTextChange?.(value);
 		}
 
 		instanceStore?.set({ value, view, extensions: internal_extensions });
 
-		node.dispatchEvent(new CustomEvent('codemirror:change', { detail: tr }));
-		options.onChange?.(tr);
+		node.dispatchEvent(new CustomEvent('codemirror:change', { detail: view_update }));
 	}
 
 	const { kind: behaviorKind = 'debounce', duration: behaviorDuration = 50 } = onChangeBehavior;
 
-	let on_change = behaviorKind === 'debounce' ? 
-		debounce(handle_change, behaviorDuration) : 
-		throttle(handle_change, behaviorDuration);
+	let on_change =
+		behaviorKind === 'debounce'
+			? debounce(handle_change, behaviorDuration)
+			: throttle(handle_change, behaviorDuration);
 
 	(async () => {
 		internal_extensions = await make_extensions(options);
@@ -426,14 +399,12 @@ export const codemirror = (
 		view = new EditorView({
 			state,
 			parent: node,
-			dispatch(tr) {
-				view.update([tr]);
-
-				on_change(tr);
-			},
 		});
 
 		make_diagnostics(view, diagnostics);
+
+		// Focus the editor if the cursor position is set
+		if (!is_undefined(options.cursorPos)) view.focus();
 
 		instanceStore?.set({
 			view: view,
@@ -451,7 +422,7 @@ export const codemirror = (
 			// The final transaction object to be applied
 			const transaction: TransactionSpec = {};
 
-			if (value !== new_options.value) {
+			if (!is_equal(value, new_options.value)) {
 				value = new_options.value;
 
 				transaction.changes = {
@@ -462,13 +433,15 @@ export const codemirror = (
 			}
 
 			if (
-				typeof new_options.cursorPos !== 'undefined' &&
-				options.cursorPos !== new_options.cursorPos
+				!is_undefined(new_options.cursorPos) &&
+				!is_equal(options.cursorPos, new_options.cursorPos)
 			) {
 				transaction.selection = {
 					anchor: new_options.cursorPos ?? 0,
 					head: new_options.cursorPos ?? 0,
 				};
+
+				view.focus();
 			}
 
 			async function append_effect(
@@ -516,13 +489,17 @@ export const codemirror = (
 				value,
 			});
 
-			const { kind: behaviorKind = 'debounce', duration: behaviorDuration = 50 } = 
+			const { kind: behaviorKind = 'debounce', duration: behaviorDuration = 50 } =
 				new_options.onChangeBehavior ?? { kind: 'debounce', duration: 50 };
-		
-			if(options.onChangeBehavior?.kind !== behaviorKind || options.onChangeBehavior.duration !== behaviorDuration){
-				on_change = behaviorKind === 'debounce' ? 
-					debounce(handle_change, behaviorDuration) : 
-					throttle(handle_change, behaviorDuration);
+
+			if (
+				!is_equal(options.onChangeBehavior?.kind, behaviorKind) ||
+				!is_equal(options.onChangeBehavior?.duration, behaviorDuration)
+			) {
+				on_change =
+					behaviorKind === 'debounce'
+						? debounce(handle_change, behaviorDuration)
+						: throttle(handle_change, behaviorDuration);
 			}
 
 			options = new_options;
@@ -537,7 +514,7 @@ export const codemirror = (
 async function get_setup(options: NeoCodemirrorOptions) {
 	const { setup } = options;
 
-	if (!setup) return [];
+	if (is_undefined(setup)) return [];
 	if (setup === 'basic') return (await import('./basic-setup')).default(options);
 	if (setup === 'minimal') return (await import('./minimal-setup')).default(options);
 
@@ -547,7 +524,7 @@ async function get_setup(options: NeoCodemirrorOptions) {
 }
 
 async function get_lang({ lang, langMap }: NeoCodemirrorOptions) {
-	if (!lang) return [];
+	if (is_undefined(lang)) return [];
 
 	if (typeof lang === 'string') {
 		if (!langMap) throw new Error('`langMap` is required when `lang` is a string.');
@@ -571,7 +548,7 @@ async function get_tab_setting({ useTabs = false, tabSize = 2 }: NeoCodemirrorOp
 }
 
 async function get_autocompletion({ autocomplete }: NeoCodemirrorOptions) {
-	if (!autocomplete) return [];
+	if (is_undefined(autocomplete)) return [];
 
 	const { autocompletion } = await import('@codemirror/autocomplete');
 
@@ -590,13 +567,16 @@ async function make_diagnostics(
 	view: EditorView,
 	diagnostics: NeoCodemirrorOptions['diagnostics']
 ) {
-	if (!diagnostics) return;
+	if (is_undefined(diagnostics)) return;
 
 	const { setDiagnostics } = await import('@codemirror/lint');
 
 	const tr = setDiagnostics(view.state, diagnostics ?? []);
 	view.dispatch(tr);
 }
+
+const is_equal = (a: unknown, b: unknown) => a === b;
+const is_undefined = (a: any): a is undefined => typeof a === 'undefined';
 
 /**
  * Reduce calls to the passed function with debounce.
@@ -633,27 +613,24 @@ function debounce<T extends (...args: any[]) => any>(
  * @param func - Function to throttle.
  * @param threshold - The delay to avoid recalling the function.
  */
-function throttle<T extends (...args: any[]) => any>(
-	func: T,
-	threshold: number,
-): T {
-	let last_args: Parameters<T>|null;
+function throttle<T extends (...args: any[]) => any>(func: T, threshold: number): T {
+	let last_args: Parameters<T> | null;
 	let should_wait = false;
-	function timeout_function(self: any){
-		if(last_args){
+	function timeout_function(self: any) {
+		if (last_args) {
 			func.apply(self, last_args);
 			setTimeout(timeout_function, threshold, self);
 			last_args = null;
 			return;
 		}
-		should_wait=false;
+		should_wait = false;
 	}
 
 	return function throttled(this: any, ...args: Parameters<T>): any {
 		const self = this;
 
-		if(should_wait){
-			last_args=args;
+		if (should_wait) {
+			last_args = args;
 			return;
 		}
 
