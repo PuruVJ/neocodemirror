@@ -1,5 +1,12 @@
 # svelte-demo
 
+## 0.0.16
+
+### Patch Changes
+
+- Updated dependencies [e5837d2]
+  - @neocodemirror/svelte@0.0.15
+
 ## 0.0.15
 
 ### Patch Changes

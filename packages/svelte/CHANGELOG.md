@@ -1,5 +1,11 @@
 # @neocodemirror/svelte
 
+## 0.0.15
+
+### Patch Changes
+
+- e5837d2: Overhaul diagnostics. use lint now. Add option lintOptions to control linting behavior
+
 ## 0.0.14
 
 ### Patch Changes
