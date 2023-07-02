@@ -15,6 +15,9 @@ import { map, type MapStore } from 'nanostores';
 import type { ActionReturn } from 'svelte/action';
 
 type MaybePromise<T> = T | Promise<T>;
+type OptionalExcept<T, K extends keyof T> = {
+	[P in keyof T]: P extends K ? T[P] : T[P] | undefined | null;
+};
 
 // type NeoCMDecorations = {
 // 	mark: { from: number; to: number; class?: string; attributes?: Record<string, string> };
@@ -24,295 +27,300 @@ type Styles = {
 	[val: string]: CSSProperties | Styles;
 };
 
-export type NeoCodemirrorOptions = {
-	/**
-	 * Value of the editor. Required
-	 *
-	 * @example
-	 * ```svelte
-	 * <div use:codemirror={{ value: `let code = 'wow'` }} />
-	 * ```
-	 */
-	value: string;
+export type NeoCodemirrorOptions = OptionalExcept<
+	{
+		/**
+		 * Value of the editor. Required
+		 *
+		 * @example
+		 * ```svelte
+		 * <div use:codemirror={{ value: `let code = 'wow'` }} />
+		 * ```
+		 */
+		value: string;
 
-	/**
-	 * The editor setup to apply. Can be either `basic` or `minimal`.
-	 * Defaults to no setup
-	 *
-	 * @default undefined
-	 *
-	 * @example
-	 * ```svelte
-	 * <div use:codemirror={{ setup: 'minimal' }} />
-	 * ```
-	 *
-	 * @see https://codemirror.net/docs/ref/#codemirror.basicSetup
-	 * @see https://codemirror.net/docs/ref/#codemirror.minimalSetup
-	 */
-	setup?: 'basic' | 'minimal';
+		/**
+		 * The editor setup to apply. Can be either `basic` or `minimal`.
+		 * Defaults to no setup
+		 *
+		 * @default undefined
+		 *
+		 * @example
+		 * ```svelte
+		 * <div use:codemirror={{ setup: 'minimal' }} />
+		 * ```
+		 *
+		 * @see https://codemirror.net/docs/ref/#codemirror.basicSetup
+		 * @see https://codemirror.net/docs/ref/#codemirror.minimalSetup
+		 */
+		setup: 'basic' | 'minimal';
 
-	/**
-	 * The language to use. Can be either a `LanguageSupport` or a string.
-	 * Defaults to none.
-	 *
-	 * When it is a `LanguageSupport`, it will be passed directly to codemirror. However, when it is a string, it will be used to get the language support from the `langMap` option.
-	 *
-	 * @see langMap option
-	 *
-	 * @default undefined
-	 *
-	 * @example
-	 * ```svelte
-	 * <script>
-	 * 	import { javascript } from '@codemirror/lang-javascript';
-	 * </script>
-	 *
-	 * <div use:codemirror={{ lang: javascript() }} />
-	 * ```
-	 *
-	 * @example
-	 * ```svelte
-	 * <script>
-	 * 	import { javascript } from '@codemirror/lang-javascript';
-	 * 	import { html } from '@codemirror/lang-html';
-	 * </script>
-	 *
-	 * <div
-	 *   use:codemirror={{
-	 *     lang: 'html',
-	 *     langMap: {
-	 *       html: () => html(),
-	 *       js: () => javascript({ typescript: true })
-	 *     }
-	 *   }}
-	 * />
-	 * ```
-	 */
-	lang?: LanguageSupport | string;
+		/**
+		 * The language to use. Can be either a `LanguageSupport` or a string.
+		 * Defaults to none.
+		 *
+		 * When it is a `LanguageSupport`, it will be passed directly to codemirror. However, when it is a string, it will be used to get the language support from the `langMap` option.
+		 *
+		 * @see langMap option
+		 *
+		 * @default undefined
+		 *
+		 * @example
+		 * ```svelte
+		 * <script>
+		 * 	import { javascript } from '@codemirror/lang-javascript';
+		 * </script>
+		 *
+		 * <div use:codemirror={{ lang: javascript() }} />
+		 * ```
+		 *
+		 * @example
+		 * ```svelte
+		 * <script>
+		 * 	import { javascript } from '@codemirror/lang-javascript';
+		 * 	import { html } from '@codemirror/lang-html';
+		 * </script>
+		 *
+		 * <div
+		 *   use:codemirror={{
+		 *     lang: 'html',
+		 *     langMap: {
+		 *       html: () => html(),
+		 *       js: () => javascript({ typescript: true })
+		 *     }
+		 *   }}
+		 * />
+		 * ```
+		 */
+		lang: LanguageSupport | string;
 
-	/**
-	 * A map of language names to functions that return a `LanguageSupport`. Can be promises too.
-	 *
-	 * A use case would be having an instance of codemirror
-	 * that switches its language based on file type chosen. In that case, combining with dynamic imports can be a great performance boost.
-	 *
-	 * @default undefined
-	 *
-	 * @example
-	 * ```svelte
-	 * <div
-	 *   use:codemirror={{
-	 *     lang: 'html',
-	 *     langMap: {
-	 *       html: () => import('@codemirror/lang-html').then((m) => m html()),
-	 *       js: () => import('@codemirror/lang-javascript').then((m) => m javascript({ typescript: true }))
-	 *     }
-	 *   }}
-	 * />
-	 * ```
-	 */
-	langMap?: Record<string, () => MaybePromise<LanguageSupport>>;
+		/**
+		 * A map of language names to functions that return a `LanguageSupport`. Can be promises too.
+		 *
+		 * A use case would be having an instance of codemirror
+		 * that switches its language based on file type chosen. In that case, combining with dynamic imports can be a great performance boost.
+		 *
+		 * @default undefined
+		 *
+		 * @example
+		 * ```svelte
+		 * <div
+		 *   use:codemirror={{
+		 *     lang: 'html',
+		 *     langMap: {
+		 *       html: () => import('@codemirror/lang-html').then((m) => m html()),
+		 *       js: () => import('@codemirror/lang-javascript').then((m) => m javascript({ typescript: true }))
+		 *     }
+		 *   }}
+		 * />
+		 * ```
+		 */
+		langMap: Record<string, () => MaybePromise<LanguageSupport>>;
 
-	/**
-	 * Whether to use tabs or spaces. Defaults to spaces.
-	 *
-	 * @default false
-	 *
-	 * @example
-	 * ```svelte
-	 * <div use:codemirror={{ useTabs: true }} />
-	 * ```
-	 *
-	 * @see https://codemirror.net/docs/ref/#commands.indentWithTab
-	 */
-	useTabs?: boolean;
+		/**
+		 * Whether to use tabs or spaces. Defaults to spaces.
+		 *
+		 * @default false
+		 *
+		 * @example
+		 * ```svelte
+		 * <div use:codemirror={{ useTabs: true }} />
+		 * ```
+		 *
+		 * @see https://codemirror.net/docs/ref/#commands.indentWithTab
+		 */
+		useTabs: boolean;
 
-	/**
-	 * The size of a tab in spaces. Defaults to 2.
-	 *
-	 * @default 2
-	 *
-	 * @see https://codemirror.net/docs/ref/#state.EditorState^tabSize
-	 *
-	 * @example
-	 * ```svelte
-	 * <div use:codemirror={{ tabSize: 4 }} />
-	 * ```
-	 */
-	tabSize?: number;
+		/**
+		 * The size of a tab in spaces. Defaults to 2.
+		 *
+		 * @default 2
+		 *
+		 * @see https://codemirror.net/docs/ref/#state.EditorState^tabSize
+		 *
+		 * @example
+		 * ```svelte
+		 * <div use:codemirror={{ tabSize: 4 }} />
+		 * ```
+		 */
+		tabSize: number;
 
-	/**
-	 * Whether to open the editor in readonly mode. Note its different from `editable`, which allows you to focus cursor in editor, but not make any changes.
-	 * Defaults to false.
-	 *
-	 * @default false
-	 *
-	 * @example
-	 * ```svelte
-	 * <div use:codemirror={{ readonly: true }} />
-	 * ```
-	 *
-	 * @see https://codemirror.net/docs/ref/#state.EditorState^readOnly
-	 */
-	readonly?: boolean;
+		/**
+		 * Whether to open the editor in readonly mode. Note its different from `editable`, which allows you to focus cursor in editor, but not make any changes.
+		 * Defaults to false.
+		 *
+		 * @default false
+		 *
+		 * @example
+		 * ```svelte
+		 * <div use:codemirror={{ readonly: true }} />
+		 * ```
+		 *
+		 * @see https://codemirror.net/docs/ref/#state.EditorState^readOnly
+		 */
+		readonly: boolean;
 
-	/**
-	 * Cursor Position. If not specified, defaults to the start of the document.
-	 *
-	 * @default undefined
-	 *
-	 * @example
-	 * ```svelte
-	 * <div use:codemirror={{ cursorPos: 10 }} />
-	 * ```
-	 */
-	cursorPos?: number;
+		/**
+		 * Cursor Position. If not specified, defaults to the start of the document.
+		 *
+		 * @default undefined
+		 *
+		 * @example
+		 * ```svelte
+		 * <div use:codemirror={{ cursorPos: 10 }} />
+		 * ```
+		 */
+		cursorPos: number;
 
-	/**
-	 * Whether to autocomplete the language's basics
-	 *
-	 * @default true
-	 *
-	 * @example
-	 * ```svelte
-	 * <div use:codemirror={{ autocomplete: false }} />
-	 * ```
-	 */
-	autocomplete?: boolean | Parameters<typeof import('@codemirror/autocomplete').autocompletion>[0];
+		/**
+		 * Whether to autocomplete the language's basics
+		 *
+		 * @default true
+		 *
+		 * @example
+		 * ```svelte
+		 * <div use:codemirror={{ autocomplete: false }} />
+		 * ```
+		 */
+		autocomplete: boolean | Parameters<typeof import('@codemirror/autocomplete').autocompletion>[0];
 
-	/**
-	 * Styles to pass to EditorView.theme. Defaults to none.
-	 *
-	 * @default undefined
-	 *
-	 * @example
-	 * ```svelte
-	 * <div use:codemirror={{ styles: { '.cm-scroller': { overflow: 'hidden' } } }} />
-	 * ```
-	 *
-	 * @see https://codemirror.net/6/docs/ref/#view.EditorView^theme
-	 */
-	styles?: Styles;
+		/**
+		 * Styles to pass to EditorView.theme. Defaults to none.
+		 *
+		 * @default undefined
+		 *
+		 * @example
+		 * ```svelte
+		 * <div use:codemirror={{ styles: { '.cm-scroller': { overflow: 'hidden' } } }} />
+		 * ```
+		 *
+		 * @see https://codemirror.net/6/docs/ref/#view.EditorView^theme
+		 */
+		styles: Styles;
 
-	/**
-	 * The theme to use. Of type `Extension`. Defaults to none.
-	 *
-	 * @default undefined
-	 *
-	 * @example
-	 * ```svelte
-	 * <script>
-	 * 	import { oneDark } from '@codemirror/theme-one-dark';
-	 * </script>
-	 *
-	 * <div use:codemirror={{ theme: oneDark }} />
-	 * ```
-	 */
-	theme?: Extension;
+		/**
+		 * The theme to use. Of type `Extension`. Defaults to none.
+		 *
+		 * @default undefined
+		 *
+		 * @example
+		 * ```svelte
+		 * <script>
+		 * 	import { oneDark } from '@codemirror/theme-one-dark';
+		 * </script>
+		 *
+		 * <div use:codemirror={{ theme: oneDark }} />
+		 * ```
+		 */
+		theme: Extension;
 
-	/**
-	 * Diagnostics data to pass to the editor. Defaults to none.
-	 *
-	 * @default undefined
-	 *
-	 * @example
-	 * ```svelte
-	 * <script>
-	 * 	import { javascript } from '@codemirror/lang-javascript';
-	 *
-	 * 	const diagnostics = [
-	 * 		{
-	 * 			from: 0,
-	 * 			to: 10,
-	 * 			message: 'This is a diagnostic message',
-	 * 			severity: 'error'
-	 * 		}
-	 * 	];
-	 *
-	 * 	const lang = javascript({ typescript: true });
-	 * </script>
-	 *
-	 * <div use:codemirror={{ lang, diagnostics }} />
-	 * ```
-	 *
-	 * @see https://codemirror.net/docs/ref/#lint
-	 */
-	diagnostics?: Diagnostic[];
-	// decorations?: NeoCMDecorations;
+		/**
+		 * Diagnostics data to pass to the editor. Defaults to none.
+		 *
+		 * @default undefined
+		 *
+		 * @example
+		 * ```svelte
+		 * <script>
+		 * 	import { javascript } from '@codemirror/lang-javascript';
+		 *
+		 * 	const diagnostics = [
+		 * 		{
+		 * 			from: 0,
+		 * 			to: 10,
+		 * 			message: 'This is a diagnostic message',
+		 * 			severity: 'error'
+		 * 		}
+		 * 	];
+		 *
+		 * 	const lang = javascript({ typescript: true });
+		 * </script>
+		 *
+		 * <div use:codemirror={{ lang, diagnostics }} />
+		 * ```
+		 *
+		 * @see https://codemirror.net/docs/ref/#lint
+		 */
+		diagnostics: Diagnostic[];
+		// decorations?: NeoCMDecorations;
 
-	/**
-	 * The extensions to use. Defaults to empty array.
-	 *
-	 * @default []
-	 *
-	 * @example
-	 * ```svelte
-	 * <script>
-	 * 	import { closeBrackets } from '@codemirror/autocomplete';
-	 * 	import { bracketMatching, codeFolding } from '@codemirror/language';
-	 * </script>
-	 *
-	 * <div use:codemirror={{ extensions: [closeBrackets(), bracketMatching(), codeFolding()] }} />
-	 * ```
-	 */
-	extensions?: Extension[];
+		/**
+		 * The extensions to use. Defaults to empty array.
+		 *
+		 * @default []
+		 *
+		 * @example
+		 * ```svelte
+		 * <script>
+		 * 	import { closeBrackets } from '@codemirror/autocomplete';
+		 * 	import { bracketMatching, codeFolding } from '@codemirror/language';
+		 * </script>
+		 *
+		 * <div use:codemirror={{ extensions: [closeBrackets(), bracketMatching(), codeFolding()] }} />
+		 * ```
+		 */
+		extensions: Extension[];
 
-	/**
-	 * Instance store passed to the editor. This is created with `withCodemirrorInstance` function. It lets you track any and all state changes.
-	 *
-	 * @default undefined
-	 *
-	 * @example
-	 * ```svelte
-	 * <script>
-	 * 	import { withCodemirrorInstance } from '@neocodemirror/svelte';
-	 *
-	 * 	const instanceStore = withCodemirrorInstance();
-	 *
-	 * $: console.log($instanceStore);
-	 * </script>
-	 *
-	 * <div use:codemirror={{ instanceStore }} />
-	 * ```
-	 */
-	instanceStore?: MapStore<CodemirrorInstance>;
+		/**
+		 * Instance store passed to the editor. This is created with `withCodemirrorInstance` function. It lets you track any and all state changes.
+		 *
+		 * @default undefined
+		 *
+		 * @example
+		 * ```svelte
+		 * <script>
+		 * 	import { withCodemirrorInstance } from '@neocodemirror/svelte';
+		 *
+		 * 	const instanceStore = withCodemirrorInstance();
+		 *
+		 * $: console.log($instanceStore);
+		 * </script>
+		 *
+		 * <div use:codemirror={{ instanceStore }} />
+		 * ```
+		 */
+		instanceStore: MapStore<CodemirrorInstance>;
 
-	/**
-	 * Options to config the behavior of the onChange/onTextChange callback. You can specify a kind
-	 * between throttle and debounce and a duration as a number of milliseconds. This prevent the callback from being called
-	 * too many times either by debouncing the change handler or by throttling it.
-	 *
-	 * @default { kind: 'debounce', duration: 50 }
-	 *
-	 * @example
-	 * ```svelte
-	 * <div use:codemirror={{ onChangeBehavior: { kind: 'throttle', duration: 350 } />
-	 * ```
-	 */
-	onChangeBehavior?: {
-		kind?: 'debounce' | 'throttle';
-		duration?: number;
-	};
-	/**
-	 * If present it will make the codemirror instance enter document mode. This means that whenever
-	 * the documentId changes the state of the codemirror instance is reset and stored in a map.
-	 * If there's a stored state for the new documentId it will be restored. This allows, for example
-	 * to keep different history for different documents.
-	 *
-	 * @default undefined
-	 *
-	 * @example
-	 * ```svelte
-	 * <div use:codemirror={{ documentId: "file.txt" />
-	 * ```
-	 */
-	documentId?: string;
-};
+		/**
+		 * Options to config the behavior of the onChange/onTextChange callback. You can specify a kind
+		 * between throttle and debounce and a duration as a number of milliseconds. This prevent the callback from being called
+		 * too many times either by debouncing the change handler or by throttling it.
+		 *
+		 * @default { kind: 'debounce', duration: 50 }
+		 *
+		 * @example
+		 * ```svelte
+		 * <div use:codemirror={{ onChangeBehavior: { kind: 'throttle', duration: 350 } />
+		 * ```
+		 */
+		onChangeBehavior: {
+			kind?: 'debounce' | 'throttle';
+			duration?: number;
+		};
+
+		/**
+		 * If present it will make the codemirror instance enter document mode. This means that whenever
+		 * the documentId changes the state of the codemirror instance is reset and stored in a map.
+		 * If there's a stored state for the new documentId it will be restored. This allows, for example
+		 * to keep different history for different documents.
+		 *
+		 * @default undefined
+		 *
+		 * @example
+		 * ```svelte
+		 * <div use:codemirror={{ documentId: "file.txt" />
+		 * ```
+		 */
+		documentId: string;
+	},
+	'value'
+>;
 
 type CodemirrorInstance = {
 	view: EditorView | null;
 	extensions: Extension | null;
 	value: string | null;
+	documents: Map<string, EditorState>;
 };
 
 export const withCodemirrorInstance = () =>
@@ -320,6 +328,7 @@ export const withCodemirrorInstance = () =>
 		view: null,
 		extensions: null,
 		value: null,
+		documents: new Map(),
 	});
 
 export const codemirror = (
@@ -334,14 +343,13 @@ export const codemirror = (
 		'on:codemirror:documentChanged'?: (e: CustomEvent<void>) => void;
 	}
 > => {
-	if (is_undefined(options)) throw new Error('No options provided. At least `value` is required.');
+	if (is_nullish(options)) throw new Error('No options provided. At least `value` is required.');
 
 	let {
 		value,
 		instanceStore,
 		diagnostics,
 		onChangeBehavior = { kind: 'debounce', duration: 50 },
-		documentId,
 	} = options;
 
 	const EDITOR_STATE_MAP = new Map<string, string>();
@@ -390,12 +398,21 @@ export const codemirror = (
 			dispatch_event(node, 'codemirror:textChange', value);
 		}
 
-		instanceStore?.set({ value, view, extensions: internal_extensions });
+		instanceStore?.set({
+			value,
+			view,
+			extensions: internal_extensions,
+			documents: instanceStore.get().documents ?? new Map(),
+		});
 
 		dispatch_event(node, 'codemirror:change', view_update);
 	}
 
-	const { kind: behaviorKind = 'debounce', duration: behaviorDuration = 50 } = onChangeBehavior;
+	const { kind: behaviorKind = 'debounce', duration: behaviorDuration = 50 } = is_nullish(
+		onChangeBehavior
+	)
+		? {}
+		: onChangeBehavior;
 
 	let on_change =
 		behaviorKind === 'debounce'
@@ -422,13 +439,7 @@ export const codemirror = (
 		make_diagnostics(view, diagnostics);
 
 		// Focus the editor if the cursor position is set
-		if (!is_undefined(options.cursorPos)) view.focus();
-
-		instanceStore?.set({
-			view: view,
-			extensions: internal_extensions,
-			value,
-		});
+		if (!is_nullish(options.cursorPos)) view.focus();
 
 		fulfill_editor_initialized!();
 	})();
@@ -451,7 +462,7 @@ export const codemirror = (
 			}
 
 			if (
-				!is_undefined(new_options.cursorPos) &&
+				!is_nullish(new_options.cursorPos) &&
 				!is_equal(options.cursorPos, new_options.cursorPos)
 			) {
 				transaction.selection = {
@@ -537,12 +548,6 @@ export const codemirror = (
 				}
 			}
 
-			instanceStore?.set({
-				view: view,
-				extensions: internal_extensions,
-				value,
-			});
-
 			const { kind: behaviorKind = 'debounce', duration: behaviorDuration = 50 } =
 				new_options.onChangeBehavior ?? { kind: 'debounce', duration: 50 };
 
@@ -568,7 +573,7 @@ export const codemirror = (
 async function get_setup(options: NeoCodemirrorOptions) {
 	const { setup } = options;
 
-	if (is_undefined(setup)) return [];
+	if (is_nullish(setup)) return [];
 	if (setup === 'basic') return (await import('./basic-setup')).default(options);
 	if (setup === 'minimal') return (await import('./minimal-setup')).default(options);
 
@@ -578,7 +583,7 @@ async function get_setup(options: NeoCodemirrorOptions) {
 }
 
 async function get_lang({ lang, langMap }: NeoCodemirrorOptions) {
-	if (is_undefined(lang)) return [];
+	if (is_nullish(lang)) return [];
 
 	if (typeof lang === 'string') {
 		if (!langMap) throw new Error('`langMap` is required when `lang` is a string.');
@@ -598,11 +603,13 @@ function get_theme({ theme, styles }: NeoCodemirrorOptions): Extension[] {
 }
 
 async function get_tab_setting({ useTabs = false, tabSize = 2 }: NeoCodemirrorOptions) {
+	if (is_nullish(tabSize)) return [];
+
 	return [EditorState.tabSize.of(tabSize), indentUnit.of(useTabs ? '\t' : ' '.repeat(tabSize))];
 }
 
 async function get_autocompletion({ autocomplete }: NeoCodemirrorOptions) {
-	if (is_undefined(autocomplete)) return [];
+	if (is_nullish(autocomplete)) return [];
 
 	const { autocompletion } = await import('@codemirror/autocomplete');
 
@@ -621,7 +628,7 @@ async function make_diagnostics(
 	view: EditorView,
 	diagnostics: NeoCodemirrorOptions['diagnostics']
 ) {
-	if (is_undefined(diagnostics)) return;
+	if (is_nullish(diagnostics)) return;
 
 	const { setDiagnostics } = await import('@codemirror/lint');
 
@@ -630,7 +637,7 @@ async function make_diagnostics(
 }
 
 const is_equal = (a: unknown, b: unknown) => a === b;
-const is_undefined = (a: any): a is undefined => typeof a === 'undefined';
+const is_nullish = (a: any): a is undefined | null => /(undefined|null)/.test(typeof a);
 
 /**
  * Reduce calls to the passed function with debounce.
