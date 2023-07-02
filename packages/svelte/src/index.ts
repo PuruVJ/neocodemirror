@@ -1,6 +1,6 @@
 import { defaultKeymap, indentWithTab } from '@codemirror/commands';
 import { indentUnit, type LanguageSupport } from '@codemirror/language';
-import type { Diagnostic } from '@codemirror/lint';
+import type { LintSource, linter } from '@codemirror/lint';
 import {
 	Compartment,
 	EditorState,
@@ -211,7 +211,9 @@ export type NeoCodemirrorOptions = {
 	theme?: Extension;
 
 	/**
-	 * Diagnostics data to pass to the editor. Defaults to none.
+	 * A (possibly async) function to provide diagnostic hints for your code(squiggles for error, warning, info, etc).
+	 * Runs everytime user types with a debounce duration.
+	 * Can be pared with `lintOptions` to lint the editor. Defaults to nothing.
 	 *
 	 * @default undefined
 	 *
@@ -220,25 +222,46 @@ export type NeoCodemirrorOptions = {
 	 * <script>
 	 * 	import { javascript } from '@codemirror/lang-javascript';
 	 *
-	 * 	const diagnostics = [
-	 * 		{
+	 * 	function lint() {
+	 * 		return [{
 	 * 			from: 0,
 	 * 			to: 10,
 	 * 			message: 'This is a diagnostic message',
 	 * 			severity: 'error'
-	 * 		}
-	 * 	];
+	 * 		}]
+	 * 	};
 	 *
 	 * 	const lang = javascript({ typescript: true });
 	 * </script>
 	 *
-	 * <div use:codemirror={{ lang, diagnostics }} />
+	 * <div use:codemirror={{ lang, lint }} />
 	 * ```
 	 *
 	 * @see https://codemirror.net/docs/ref/#lint
 	 */
-	diagnostics?: Diagnostic[];
-	// decorations?: NeoCMDecorations;
+	lint?: LintSource;
+
+	/**
+	 * Options to pass to the linter. Defaults to none.
+	 *
+	 * @default undefined
+	 *
+	 * @example
+	 * ```svelte
+	 * <script>
+	 * 	import { javascript } from '@codemirror/lang-javascript';
+	 *
+	 * 	function lint() {
+	 * 		// Omitted for brevity
+	 * 	}
+	 *
+	 * 	const lang = javascript({ typescript: true });
+	 * </script>
+	 *
+	 * <div use:codemirror={{ lang, lint, lintOptions: { delay: 100 } }} />
+	 * ```
+	 */
+	lintOptions?: Parameters<typeof linter>[1];
 
 	/**
 	 * The extensions to use. Defaults to empty array.
@@ -320,12 +343,7 @@ export const codemirror = (
 > => {
 	if (is_undefined(options)) throw new Error('No options provided. At least `value` is required.');
 
-	let {
-		value,
-		instanceStore,
-		diagnostics,
-		onChangeBehavior = { kind: 'debounce', duration: 50 },
-	} = options;
+	let { value, instanceStore, onChangeBehavior = { kind: 'debounce', duration: 50 } } = options;
 
 	let fulfill_editor_initialized: (...args: any) => void;
 	let editor_initialized = new Promise((r) => (fulfill_editor_initialized = r));
@@ -340,11 +358,12 @@ export const codemirror = (
 	const readonly_compartment = new Compartment();
 	const extensions_compartment = new Compartment();
 	const autocomplete_compartment = new Compartment();
+	const linter_compartment = new Compartment();
 
 	const watcher = EditorView.updateListener.of((view_update) => on_change(view_update));
 
 	async function make_extensions(options: NeoCodemirrorOptions) {
-		return [
+		return Promise.all([
 			watcher,
 			// User extensions matter the most, keep em on top
 			extensions_compartment.of(get_user_extensions(options)),
@@ -360,7 +379,8 @@ export const codemirror = (
 			theming_compartment.of(get_theme(options)),
 			tabs_compartment.of(await get_tab_setting(options)),
 			readonly_compartment.of(get_readonly(options)),
-		];
+			linter_compartment.of(await get_linter(options)),
+		]);
 	}
 
 	function handle_change(view_update: ViewUpdate): void {
@@ -401,16 +421,8 @@ export const codemirror = (
 			parent: node,
 		});
 
-		make_diagnostics(view, diagnostics);
-
 		// Focus the editor if the cursor position is set
 		if (!is_undefined(options.cursorPos)) view.focus();
-
-		instanceStore?.set({
-			view: view,
-			extensions: internal_extensions,
-			value,
-		});
 
 		fulfill_editor_initialized!();
 	})();
@@ -450,21 +462,24 @@ export const codemirror = (
 				factory: (options: NeoCodemirrorOptions) => MaybePromise<any>
 			) {
 				transaction.effects = transaction.effects ?? [];
+				const effects = transaction.effects as StateEffect<any>[];
+
+				let are_all_options_undefined = true;
 
 				for (const option_name of options_list) {
 					const new_option = new_options[option_name];
 					const old_option = options[option_name];
 
-					const effects = transaction.effects as StateEffect<any>[];
+					if (!is_undefined(new_option)) {
+						are_all_options_undefined = false;
 
-					if (typeof new_option !== 'undefined') {
-						if (new_option !== old_option) {
-							effects.push(compartment.reconfigure(await factory(new_options)));
+						if (!is_equal(new_option, old_option)) {
+							return effects.push(compartment.reconfigure(await factory(new_options)));
 						}
-					} else {
-						return effects.push(compartment.reconfigure([]));
 					}
 				}
+
+				if (are_all_options_undefined) effects.push(compartment.reconfigure([]));
 			}
 
 			// Run them all in parallel
@@ -476,18 +491,10 @@ export const codemirror = (
 				append_effect(extensions_compartment, ['extensions'], get_user_extensions),
 				append_effect(readonly_compartment, ['readonly'], get_readonly),
 				append_effect(autocomplete_compartment, ['autocomplete'], get_autocompletion),
+				append_effect(linter_compartment, ['lint', 'lintOptions'], get_linter),
 			]);
 
 			view.dispatch(transaction);
-			make_diagnostics(view, new_options.diagnostics);
-
-			internal_extensions = await make_extensions(new_options);
-
-			instanceStore?.set({
-				view: view,
-				extensions: internal_extensions,
-				value,
-			});
 
 			const { kind: behaviorKind = 'debounce', duration: behaviorDuration = 50 } =
 				new_options.onChangeBehavior ?? { kind: 'debounce', duration: 50 };
@@ -503,6 +510,8 @@ export const codemirror = (
 			}
 
 			options = new_options;
+
+			internal_extensions = await make_extensions(new_options);
 		},
 
 		destroy() {
@@ -563,20 +572,18 @@ function get_user_extensions({ extensions }: NeoCodemirrorOptions) {
 	return extensions ?? [];
 }
 
-async function make_diagnostics(
-	view: EditorView,
-	diagnostics: NeoCodemirrorOptions['diagnostics']
-) {
-	if (is_undefined(diagnostics)) return;
+async function get_linter({ lint, lintOptions = {} }: NeoCodemirrorOptions) {
+	if (is_undefined(lint)) return [];
+	if (!is_function(lint)) throw new Error('`lint` must be a function.');
 
-	const { setDiagnostics } = await import('@codemirror/lint');
+	const { linter } = await import('@codemirror/lint');
 
-	const tr = setDiagnostics(view.state, diagnostics ?? []);
-	view.dispatch(tr);
+	return linter(lint, lintOptions);
 }
 
 const is_equal = (a: unknown, b: unknown) => a === b;
-const is_undefined = (a: any): a is undefined => typeof a === 'undefined';
+const is_undefined = (a: unknown): a is undefined => typeof a === 'undefined';
+const is_function = (a: unknown): a is Function => typeof a === 'function';
 
 /**
  * Reduce calls to the passed function with debounce.
