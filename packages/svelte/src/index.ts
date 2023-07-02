@@ -424,12 +424,6 @@ export const codemirror = (
 		// Focus the editor if the cursor position is set
 		if (!is_undefined(options.cursorPos)) view.focus();
 
-		instanceStore?.set({
-			view: view,
-			extensions: internal_extensions,
-			value,
-		});
-
 		fulfill_editor_initialized!();
 	})();
 
@@ -468,21 +462,24 @@ export const codemirror = (
 				factory: (options: NeoCodemirrorOptions) => MaybePromise<any>
 			) {
 				transaction.effects = transaction.effects ?? [];
+				const effects = transaction.effects as StateEffect<any>[];
+
+				let are_all_options_undefined = true;
 
 				for (const option_name of options_list) {
 					const new_option = new_options[option_name];
 					const old_option = options[option_name];
 
-					const effects = transaction.effects as StateEffect<any>[];
+					if (!is_undefined(new_option)) {
+						are_all_options_undefined = false;
 
-					if (typeof new_option !== 'undefined') {
-						if (new_option !== old_option) {
-							effects.push(compartment.reconfigure(await factory(new_options)));
+						if (!is_equal(new_option, old_option)) {
+							return effects.push(compartment.reconfigure(await factory(new_options)));
 						}
-					} else {
-						return effects.push(compartment.reconfigure([]));
 					}
 				}
+
+				if (are_all_options_undefined) effects.push(compartment.reconfigure([]));
 			}
 
 			// Run them all in parallel
@@ -499,14 +496,6 @@ export const codemirror = (
 
 			view.dispatch(transaction);
 
-			internal_extensions = await make_extensions(new_options);
-
-			instanceStore?.set({
-				view: view,
-				extensions: internal_extensions,
-				value,
-			});
-
 			const { kind: behaviorKind = 'debounce', duration: behaviorDuration = 50 } =
 				new_options.onChangeBehavior ?? { kind: 'debounce', duration: 50 };
 
@@ -521,6 +510,8 @@ export const codemirror = (
 			}
 
 			options = new_options;
+
+			internal_extensions = await make_extensions(new_options);
 		},
 
 		destroy() {
@@ -581,7 +572,7 @@ function get_user_extensions({ extensions }: NeoCodemirrorOptions) {
 	return extensions ?? [];
 }
 
-async function get_linter({ lint, lintOptions }: NeoCodemirrorOptions) {
+async function get_linter({ lint, lintOptions = {} }: NeoCodemirrorOptions) {
 	if (is_undefined(lint)) return [];
 	if (!is_function(lint)) throw new Error('`lint` must be a function.');
 
