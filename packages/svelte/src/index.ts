@@ -325,7 +325,7 @@ export type NeoCodemirrorOptions = OptionalExcept<
 		 * If present it will make the codemirror instance enter document mode. This means that whenever
 		 * the documentId changes the state of the codemirror instance is reset and stored in a map.
 		 * If there's a stored state for the new documentId it will be restored. This allows, for example
-		 * to keep different history for different documents.
+		 * to keep different undo-redo history for different documents.
 		 *
 		 * @default undefined
 		 *
@@ -343,7 +343,7 @@ type CodemirrorInstance = {
 	view: EditorView | null;
 	extensions: Extension | null;
 	value: string | null;
-	documents: Map<string, EditorState>;
+	documents: Map<string, string>;
 };
 
 export const withCodemirrorInstance = () =>
@@ -398,7 +398,7 @@ export const codemirror = (
 			// Autocomplete may come built in with setup: basic, so always keep it above setup_compartment
 			autocomplete_compartment.of(await get_autocompletion(options)),
 
-			setup_compartment.of((await get_setup(options)) ?? []),
+			setup_compartment.of(await get_setup(options)),
 
 			// Needs to be under `setup` because setup, if there, will add the indentWithTab
 			keymap.of([...defaultKeymap, ...(options.useTabs ? [indentWithTab] : [])]),
@@ -410,22 +410,26 @@ export const codemirror = (
 		]);
 	}
 
+	function dispatch_event(event: string, detail?: unknown) {
+		node.dispatchEvent(new CustomEvent(event, detail ? { detail } : undefined));
+	}
+
 	function handle_change(view_update: ViewUpdate): void {
 		const new_value = view.state.doc.toString();
 
 		if (!is_equal(new_value, value)) {
 			value = new_value;
-			dispatch_event(node, 'codemirror:textChange', value);
+			dispatch_event('codemirror:textChange', value);
 		}
 
 		instanceStore?.set({
 			value,
 			view,
 			extensions: internal_extensions,
-			documents: instanceStore.get().documents ?? new Map(),
+			documents: EDITOR_STATE_MAP,
 		});
 
-		dispatch_event(node, 'codemirror:change', view_update);
+		dispatch_event('codemirror:change', view_update);
 	}
 
 	const { kind: behaviorKind = 'debounce', duration: behaviorDuration = 50 } = is_nullish(
@@ -546,7 +550,7 @@ export const codemirror = (
 					const old_state = EDITOR_STATE_MAP.get(new_options.documentId);
 					// we dispatch the events for document changing, this allows
 					// the user to store non serializable state (looking at you vim)
-					dispatch_event(node, 'codemirror:documentChanging');
+					dispatch_event('codemirror:documentChanging');
 					// we set the state...if there's the old state we convert it from
 					// json and add back the history field otherwise we create a brand
 					// new state to wipe the history of the old one
@@ -565,17 +569,14 @@ export const codemirror = (
 							  })
 					);
 					// we dispatch the events for the documentChanged
-					dispatch_event(node, 'codemirror:documentChanged');
+					dispatch_event('codemirror:documentChanged');
 				}
 			}
 
 			const { kind: behaviorKind = 'debounce', duration: behaviorDuration = 50 } =
 				new_options.onChangeBehavior ?? { kind: 'debounce', duration: 50 };
 
-			if (
-				!is_equal(options.onChangeBehavior?.kind, behaviorKind) ||
-				!is_equal(options.onChangeBehavior?.duration, behaviorDuration)
-			) {
+			if (!is_equal(options.onChangeBehavior, new_options.onChangeBehavior)) {
 				on_change =
 					behaviorKind === 'debounce'
 						? debounce(handle_change, behaviorDuration)
@@ -656,9 +657,21 @@ async function get_linter({ lint, lintOptions = {} }: NeoCodemirrorOptions) {
 	return linter(lint, lintOptions ?? {});
 }
 
-const is_equal = (a: unknown, b: unknown) => a === b;
+const is_equal = (a: unknown, b: unknown) => {
+	if (!is_object(a) || !is_object(b)) return a === b;
+
+	const sortedStr = (obj: object) => JSON.stringify(obj, Object.keys(obj).sort());
+
+	try {
+		return sortedStr(a) === sortedStr(b);
+	} catch {
+		return false;
+	}
+};
+
 const is_nullish = (a: any): a is undefined | null => /(undefined|null)/.test(typeof a);
 const is_function = (a: unknown): a is Function => typeof a === 'function';
+const is_object = (a: unknown): a is object => typeof a === 'object' && a !== null;
 
 /**
  * Reduce calls to the passed function with debounce.
@@ -720,8 +733,4 @@ function throttle<T extends (...args: any[]) => any>(func: T, threshold: number)
 		should_wait = true;
 		setTimeout(timeout_function, threshold, self);
 	} as T;
-}
-
-function dispatch_event(node: Node, event: string, detail?: unknown) {
-	node.dispatchEvent(new CustomEvent(event, detail ? { detail } : undefined));
 }
