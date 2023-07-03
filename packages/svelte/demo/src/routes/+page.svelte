@@ -1,7 +1,8 @@
 <script lang="ts">
-	import type { Diagnostic } from '@codemirror/lint';
+	import type { Diagnostic, LintSource } from '@codemirror/lint';
 	import { oneDark } from '@codemirror/theme-one-dark';
 	import { codemirror, withCodemirrorInstance } from '@neocodemirror/svelte';
+	import { onMount } from 'svelte';
 
 	const store = withCodemirrorInstance();
 
@@ -17,7 +18,7 @@
 		},
 	};
 
-	function make_diagnostics() {
+	function diagnostics() {
 		const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a));
 
 		const from = rand(0, ($store.value?.length ?? 0) / 2);
@@ -25,21 +26,19 @@
 
 		console.log({ from, to });
 
-		diagnostics = [
+		return [
 			{
 				from,
 				to,
-				severity: 'warning',
+				severity: 'error',
 				message: 'This is an error',
 			},
-		];
+		] as Diagnostic[];
 	}
 
 	let selected: keyof typeof options = 'svelte';
 
 	let cursorPos = 0;
-
-	let diagnostics: Diagnostic[] = [];
 
 	let setup: 'minimal' | 'basic' | undefined = 'basic';
 
@@ -55,8 +54,6 @@
 <button on:click={() => (selected = 'js')}>JS</button>
 <button on:click={() => (selected = 'svelte')}>Svelte</button>
 <button on:click={() => (selected = 'md')}>MD</button>
-
-<button on:click={() => make_diagnostics()}>Change diagnostics</button>
 
 <button on:click={change_pos}>Change cursor: {cursorPos}</button>
 
@@ -91,7 +88,10 @@
 		theme: oneDark,
 		extensions: [],
 		cursorPos,
-		diagnostics: diagnostics,
+		lint: diagnostics,
+		lintOptions: {
+			delay: 750,
+		},
 		instanceStore: store,
 		documentId: selected,
 	}}
