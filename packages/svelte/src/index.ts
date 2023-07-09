@@ -538,13 +538,20 @@ export const codemirror = (
 
 			internal_extensions = await make_extensions(new_options);
 
-			if (options.documentId && options.documentId !== new_options.documentId) {
+			if (
+				!is_nullish(options.documentId) &&
+				!is_equal(options.documentId, new_options.documentId)
+			) {
+				console.log(1);
 				// keep track of the old state
 				EDITOR_STATE_MAP.set(options.documentId, pre_transaction_state);
+
+				console.log(EDITOR_STATE_MAP);
 				// if there's a new documentId
-				if (new_options.documentId) {
+				if (!is_nullish(new_options.documentId)) {
 					// we recover the state from the map
 					const old_state = EDITOR_STATE_MAP.get(new_options.documentId);
+					console.log(old_state);
 					// we dispatch the events for document changing, this allows
 					// the user to store non serializable state (looking at you vim)
 					dispatch_event('codemirror:documentChanging');
