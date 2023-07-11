@@ -500,7 +500,6 @@ export const codemirror = (
 				!is_nullish(new_options.cursorPos) &&
 				!is_equal(options.cursorPos, new_options.cursorPos)
 			) {
-				console.log('setting cursorPos', new_options.cursorPos);
 				transaction.selection = {
 					anchor: new_options.cursorPos ?? 0,
 					head: new_options.cursorPos ?? 0,
@@ -546,7 +545,6 @@ export const codemirror = (
 
 			// Make sure document id is not changing
 			if (is_equal(options.documentId, new_options.documentId) && !is_nullish(options.documentId)) {
-				console.log(1);
 				// Run them all in parallel
 				await Promise.all([
 					append_effect(setup_compartment, ['setup'], get_setup),
