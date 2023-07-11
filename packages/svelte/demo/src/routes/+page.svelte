@@ -64,6 +64,12 @@
 </select>
 
 <div
+	on:codemirror:documentChanged={() => {
+		console.log('document changed on div');
+	}}
+	on:codemirror:documentChanging={() => {
+		console.log('document changing on div');
+	}}
 	use:codemirror={{
 		value: options[selected].value,
 		setup,
@@ -87,6 +93,7 @@
 			delay: 750,
 		},
 		instanceStore: store,
+		documentId: selected,
 	}}
 	on:codemirror:textChange={({ detail: value }) => {
 		console.log(value);
