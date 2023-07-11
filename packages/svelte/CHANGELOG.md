@@ -1,5 +1,11 @@
 # @neocodemirror/svelte
 
+## 0.0.16
+
+### Patch Changes
+
+- b3d90c5: Add document mode, where you can specify a documentId to tie the specific editor state to that documentId (useful for multitab applications)
+
 ## 0.0.15
 
 ### Patch Changes
