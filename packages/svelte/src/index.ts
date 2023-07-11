@@ -471,12 +471,10 @@ export const codemirror = (
 			const transaction: TransactionSpec = {};
 
 			if (!is_equal(value, new_options.value)) {
-				value = new_options.value;
-
 				transaction.changes = {
 					from: 0,
 					to: view.state.doc.length,
-					insert: value,
+					insert: new_options.value,
 				};
 			}
 
@@ -518,25 +516,31 @@ export const codemirror = (
 				if (are_all_options_nullish) effects.push(compartment.reconfigure([]));
 			}
 
-			// Run them all in parallel
-			await Promise.all([
-				append_effect(setup_compartment, ['setup'], get_setup),
-				append_effect(lang_compartment, ['lang'], get_lang),
-				append_effect(tabs_compartment, ['useTabs', 'tabSize'], get_tab_setting),
-				append_effect(theming_compartment, ['theme'], get_theme),
-				append_effect(extensions_compartment, ['extensions'], get_user_extensions),
-				append_effect(readonly_compartment, ['readonly'], get_readonly),
-				append_effect(autocomplete_compartment, ['autocomplete'], get_autocompletion),
-				append_effect(linter_compartment, ['lint', 'lintOptions'], get_linter),
-			]);
-
 			// we need to get the state before the transaction apply because the
 			// transaction also changes the value
 			const pre_transaction_state = view.state.toJSON({ history: historyField });
 
-			view.dispatch(transaction);
+			// trigger here, in parallel, resolve and collect later
+			const internal_extensions_promise = make_extensions(new_options);
 
-			internal_extensions = await make_extensions(new_options);
+			// Make sure document id is not changing
+			if (is_equal(options.documentId, new_options.documentId) && !is_nullish(options.documentId)) {
+				// Run them all in parallel
+				await Promise.all([
+					append_effect(setup_compartment, ['setup'], get_setup),
+					append_effect(lang_compartment, ['lang'], get_lang),
+					append_effect(tabs_compartment, ['useTabs', 'tabSize'], get_tab_setting),
+					append_effect(theming_compartment, ['theme'], get_theme),
+					append_effect(extensions_compartment, ['extensions'], get_user_extensions),
+					append_effect(readonly_compartment, ['readonly'], get_readonly),
+					append_effect(autocomplete_compartment, ['autocomplete'], get_autocompletion),
+					append_effect(linter_compartment, ['lint', 'lintOptions'], get_linter),
+				]);
+
+				view.dispatch(transaction);
+
+				internal_extensions = await internal_extensions_promise;
+			}
 
 			if (
 				!is_nullish(options.documentId) &&
@@ -552,6 +556,8 @@ export const codemirror = (
 					// we recover the state from the map
 					const old_state = EDITOR_STATE_MAP.get(new_options.documentId);
 					console.log(old_state);
+
+					internal_extensions = await internal_extensions_promise;
 					// we dispatch the events for document changing, this allows
 					// the user to store non serializable state (looking at you vim)
 					dispatch_event('codemirror:documentChanging');
