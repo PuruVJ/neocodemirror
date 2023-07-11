@@ -681,7 +681,7 @@ const is_equal = (a: unknown, b: unknown) => {
 
 const is_nullish = (a: any): a is undefined | null => /(undefined|null)/.test(typeof a);
 const is_function = (a: unknown): a is Function => typeof a === 'function';
-const is_object = (a: unknown): a is object => typeof a === 'object' && a !== null;
+const is_object = (a: unknown): a is object => /(object|null)/.test(typeof a);
 
 /**
  * Reduce calls to the passed function with debounce.
