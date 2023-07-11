@@ -8,6 +8,7 @@ import {
 	type Extension,
 	type Transaction,
 	type TransactionSpec,
+	StateField,
 } from '@codemirror/state';
 import { EditorView, ViewUpdate, keymap } from '@codemirror/view';
 import type { Properties as CSSProperties } from 'csstype';
@@ -334,6 +335,23 @@ export type NeoCodemirrorOptions = {
 	 * ```
 	 */
 	documentId?: string | null;
+
+	/**
+	 * Fields to pass to codemirror while saving state in document mode. By default saves history.
+	 *
+	 * @default { history: historyField }
+	 *
+	 * @example
+	 *
+	 * ```svelte
+	 * <script>
+	 * 	import { historyField } from '@codemirror/commands';
+	 * </script>
+	 *
+	 * <div use:codemirror={{ documentId: "file.txt", documentFields: { history: historyField } }} />
+	 * ```
+	 */
+	documentFields?: Record<string, StateField<any>> | null;
 };
 
 type CodemirrorInstance = {
@@ -518,7 +536,9 @@ export const codemirror = (
 
 			// we need to get the state before the transaction apply because the
 			// transaction also changes the value
-			const pre_transaction_state = view.state.toJSON({ history: historyField });
+			const pre_transaction_state = view.state.toJSON(
+				is_object(new_options.documentFields) ? new_options.documentFields : DEFAULT_DOCUMENT_FIELDS
+			);
 
 			// trigger here, in parallel, resolve and collect later
 			const internal_extensions_promise = make_extensions(new_options);
@@ -568,9 +588,9 @@ export const codemirror = (
 							? EditorState.fromJSON(
 									old_state,
 									{ extensions: internal_extensions, doc: new_options.value },
-									{
-										history: historyField,
-									}
+									is_object(new_options.documentFields)
+										? new_options.documentFields
+										: DEFAULT_DOCUMENT_FIELDS
 							  )
 							: EditorState.create({
 									doc: new_options.value,
@@ -602,6 +622,10 @@ export const codemirror = (
 			editor_initialized.then(() => view?.destroy());
 		},
 	};
+};
+
+const DEFAULT_DOCUMENT_FIELDS = {
+	history: historyField,
 };
 
 async function get_setup(options: NeoCodemirrorOptions) {
