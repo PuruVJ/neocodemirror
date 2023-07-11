@@ -359,8 +359,8 @@ export const codemirror = (
 	{
 		'on:codemirror:textChange'?: (e: CustomEvent<string>) => void;
 		'on:codemirror:change'?: (e: CustomEvent<Transaction>) => void;
-		'on:codemirror:documentChanging'?: (e: CustomEvent<void>) => void;
-		'on:codemirror:documentChanged'?: (e: CustomEvent<void>) => void;
+		'on:codemirror:documentChanging'?: (e: CustomEvent<{ view: EditorView }>) => void;
+		'on:codemirror:documentChanged'?: (e: CustomEvent<{ view: EditorView }>) => void;
 	}
 > => {
 	if (is_nullish(options)) throw new Error('No options provided. At least `value` is required.');
@@ -546,24 +546,23 @@ export const codemirror = (
 				!is_nullish(options.documentId) &&
 				!is_equal(options.documentId, new_options.documentId)
 			) {
-				console.log(1);
 				// keep track of the old state
 				EDITOR_STATE_MAP.set(options.documentId, pre_transaction_state);
 
-				console.log(EDITOR_STATE_MAP);
 				// if there's a new documentId
 				if (!is_nullish(new_options.documentId)) {
 					// we recover the state from the map
 					const old_state = EDITOR_STATE_MAP.get(new_options.documentId);
-					console.log(old_state);
 
-					internal_extensions = await internal_extensions_promise;
 					// we dispatch the events for document changing, this allows
 					// the user to store non serializable state (looking at you vim)
-					dispatch_event('codemirror:documentChanging');
+					dispatch_event('codemirror:documentChanging', { view });
 					// we set the state...if there's the old state we convert it from
 					// json and add back the history field otherwise we create a brand
 					// new state to wipe the history of the old one
+
+					internal_extensions = await internal_extensions_promise;
+
 					view.setState(
 						old_state
 							? EditorState.fromJSON(
@@ -578,8 +577,9 @@ export const codemirror = (
 									extensions: internal_extensions,
 							  })
 					);
+
 					// we dispatch the events for the documentChanged
-					dispatch_event('codemirror:documentChanged');
+					dispatch_event('codemirror:documentChanged', { view });
 				}
 			}
 
