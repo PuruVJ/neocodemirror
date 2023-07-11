@@ -500,6 +500,7 @@ export const codemirror = (
 				!is_nullish(new_options.cursorPos) &&
 				!is_equal(options.cursorPos, new_options.cursorPos)
 			) {
+				console.log('setting cursorPos', new_options.cursorPos);
 				transaction.selection = {
 					anchor: new_options.cursorPos ?? 0,
 					head: new_options.cursorPos ?? 0,
@@ -545,6 +546,7 @@ export const codemirror = (
 
 			// Make sure document id is not changing
 			if (is_equal(options.documentId, new_options.documentId) && !is_nullish(options.documentId)) {
+				console.log(1);
 				// Run them all in parallel
 				await Promise.all([
 					append_effect(setup_compartment, ['setup'], get_setup),
@@ -597,6 +599,9 @@ export const codemirror = (
 									extensions: internal_extensions,
 							  })
 					);
+
+					// Focus the editor in the right place
+					view.focus();
 
 					// we dispatch the events for the documentChanged
 					dispatch_event('codemirror:documentChanged', { view });
@@ -703,9 +708,9 @@ const is_equal = (a: unknown, b: unknown) => {
 	}
 };
 
-const is_nullish = (a: any): a is undefined | null => /(undefined|null)/.test(typeof a);
+const is_nullish = (a: any): a is undefined | null => a == null;
 const is_function = (a: unknown): a is Function => typeof a === 'function';
-const is_object = (a: unknown): a is object => /(object|null)/.test(typeof a);
+const is_object = (a: unknown): a is object => !is_nullish(a) && typeof a === 'object';
 
 /**
  * Reduce calls to the passed function with debounce.
