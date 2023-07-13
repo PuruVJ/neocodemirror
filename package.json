@@ -7,7 +7,7 @@
 		"compile:watch": "pnpm -r compile -- --watch",
 		"compile": "pnpm -r compile",
 		"ci:version": "changeset version",
-		"ci:release": "changeset publish"
+		"ci:release": "pnpm run compile && changeset publish"
 	},
 	"devDependencies": {
 		"@changesets/cli": "^2.26.1",
