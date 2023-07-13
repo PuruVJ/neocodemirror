@@ -1,5 +1,11 @@
 # @neocodemirror/svelte
 
+## 0.0.17
+
+### Patch Changes
+
+- 40c79d9: Add changesets, fix output of old version
+
 ## 0.0.16
 
 ### Patch Changes
