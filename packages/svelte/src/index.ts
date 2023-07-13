@@ -577,12 +577,12 @@ export const codemirror = (
 					// we dispatch the events for document changing, this allows
 					// the user to store non serializable state (looking at you vim)
 					dispatch_event('codemirror:documentChanging', { view });
-					// we set the state...if there's the old state we convert it from
-					// json and add back the history field otherwise we create a brand
-					// new state to wipe the history of the old one
 
 					internal_extensions = await internal_extensions_promise;
 
+					// we set the state...if there's the old state we convert it from
+					// json and add back the history field otherwise we create a brand
+					// new state to wipe the history of the old one
 					view.setState(
 						old_state
 							? EditorState.fromJSON(
