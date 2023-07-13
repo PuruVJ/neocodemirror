@@ -580,7 +580,7 @@ export const codemirror = (
 
 					internal_extensions = await internal_extensions_promise;
 
-					// we set the state...if there's the old state we convert it from
+					// we set the state. if there's the old state we convert it from
 					// json and add back the history field otherwise we create a brand
 					// new state to wipe the history of the old one
 					view.setState(
