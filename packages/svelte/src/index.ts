@@ -5,10 +5,9 @@ import {
 	Compartment,
 	EditorState,
 	StateEffect,
-	type Extension,
-	type Transaction,
-	type TransactionSpec,
 	StateField,
+	type Extension,
+	type TransactionSpec,
 } from '@codemirror/state';
 import { EditorView, ViewUpdate, keymap } from '@codemirror/view';
 import type { Properties as CSSProperties } from 'csstype';
@@ -375,8 +374,12 @@ export const codemirror = (
 ): ActionReturn<
 	NeoCodemirrorOptions,
 	{
-		'on:codemirror:textChange'?: (e: CustomEvent<string>) => void;
-		'on:codemirror:change'?: (e: CustomEvent<Transaction>) => void;
+		'on:codemirror:textChange'?: (
+			e: CustomEvent<{ value: string; documentChanged: boolean }>
+		) => void;
+		'on:codemirror:change'?: (
+			e: CustomEvent<{ viewUpdate: ViewUpdate; documentChanged: boolean }>
+		) => void;
 		'on:codemirror:documentChanging'?: (e: CustomEvent<{ view: EditorView }>) => void;
 		'on:codemirror:documentChanged'?: (e: CustomEvent<{ view: EditorView }>) => void;
 	}
@@ -429,12 +432,13 @@ export const codemirror = (
 		node.dispatchEvent(new CustomEvent(event, detail ? { detail } : undefined));
 	}
 
+	let document_changed = false;
 	function handle_change(view_update: ViewUpdate): void {
 		const new_value = view.state.doc.toString();
 
 		if (!is_equal(new_value, value)) {
 			value = new_value;
-			dispatch_event('codemirror:textChange', value);
+			dispatch_event('codemirror:textChange', { value, documentChanged: document_changed });
 		}
 
 		instanceStore?.set({
@@ -444,7 +448,10 @@ export const codemirror = (
 			documents: EDITOR_STATE_MAP,
 		});
 
-		dispatch_event('codemirror:change', view_update);
+		dispatch_event('codemirror:change', {
+			viewUpdate: view_update,
+			documentChanged: document_changed,
+		});
 	}
 
 	const { kind: behaviorKind = 'debounce', duration: behaviorDuration = 50 } = is_nullish(
@@ -484,6 +491,8 @@ export const codemirror = (
 	return {
 		async update(new_options: NeoCodemirrorOptions) {
 			await editor_initialized;
+
+			document_changed = false;
 
 			// The final transaction object to be applied
 			const transaction: TransactionSpec = {};
@@ -601,6 +610,7 @@ export const codemirror = (
 					// Focus the editor in the right place
 					view.focus();
 
+					document_changed = true;
 					// we dispatch the events for the documentChanged
 					dispatch_event('codemirror:documentChanged', { view });
 				}
