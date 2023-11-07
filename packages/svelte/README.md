@@ -69,7 +69,7 @@ If you pass a `documentId` in the options you'll automatically enter document mo
 {/each}
 
 <div 
-	on:codemirror:changeText={(new_text)=>{
+	on:codemirror:textChange={(new_text)=>{
 		documents[selected_document].content=new_text;
 	}}
 	use:codemirror={{ 
