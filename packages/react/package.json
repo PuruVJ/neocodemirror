@@ -1,0 +1,67 @@
+{
+	"name": "@neocodemirror/react",
+	"version": "0.0.17",
+	"description": "React component to add codemirror to your apps 😉",
+	"main": "./dist/index.js",
+	"module": "./dist/index.js",
+	"type": "module",
+	"types": "./dist/index.d.ts",
+	"files": [
+		"dist/*"
+	],
+	"sideEffects": false,
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		},
+		"./package.json": "./package.json"
+	},
+	"scripts": {
+		"compile:watch": "tsup --watch",
+		"compile": "tsup ",
+		"pub": "pnpm build && pnpm publish --no-git-checks --access public",
+		"pub:dry": "pnpm build && pnpm publish --dry-run --no-git-checks --access public"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/PuruVJ/neocodemirror.git"
+	},
+	"keywords": [
+		"codemirror",
+		"svelte",
+		"react-codemirror",
+		"svelte",
+		"small",
+		"tiny",
+		"performant",
+		"neocodemirror",
+		"editor",
+		"monaco"
+	],
+	"author": "Puru Vijay",
+	"license": "MIT",
+	"bugs": {
+		"url": "https://github.com/PuruVJ/neocodemirror/issues"
+	},
+	"dependencies": {
+		"csstype": "^3.1.3",
+		"nanostores": "^0.9.5"
+	},
+	"devDependencies": {
+		"@neocodemirror/svelte": "workspace:*",
+		"@types/react": "^18.2.55",
+		"react": "^18.2.0"
+	},
+	"peerDependencies": {
+		"@codemirror/autocomplete": "^6.12.0",
+		"@codemirror/commands": "^6.3.3",
+		"@codemirror/language": "^6.10.1",
+		"@codemirror/lint": "^6.5.0",
+		"@codemirror/search": "^6.5.6",
+		"@codemirror/state": "^6.4.0",
+		"@codemirror/view": "^6.24.0"
+	},
+	"homepage": "https://github.com/PuruVJ/neocodemirror"
+}
