@@ -1,8 +1,7 @@
 <script lang="ts">
-	import type { Diagnostic, LintSource } from '@codemirror/lint';
+	import type { Diagnostic } from '@codemirror/lint';
 	import { oneDark } from '@codemirror/theme-one-dark';
 	import { codemirror, withCodemirrorInstance } from '@neocodemirror/svelte';
-	import { onMount } from 'svelte';
 
 	const store = withCodemirrorInstance();
 
