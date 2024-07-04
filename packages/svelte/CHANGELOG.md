@@ -1,5 +1,11 @@
 # @neocodemirror/svelte
 
+## 0.0.18
+
+### Patch Changes
+
+- cd1ef50: fix: Watch `style` for changes as well
+
 ## 0.0.17
 
 ### Patch Changes
