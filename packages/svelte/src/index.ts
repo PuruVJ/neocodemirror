@@ -550,7 +550,7 @@ export const codemirror = (
 					append_effect(setup_compartment, ['setup'], get_setup),
 					append_effect(lang_compartment, ['lang'], get_lang),
 					append_effect(tabs_compartment, ['useTabs', 'tabSize'], get_tab_setting),
-					append_effect(theming_compartment, ['theme'], get_theme),
+					append_effect(theming_compartment, ['theme', 'styles'], get_theme),
 					append_effect(extensions_compartment, ['extensions'], get_user_extensions),
 					append_effect(readonly_compartment, ['readonly'], get_readonly),
 					append_effect(autocomplete_compartment, ['autocomplete'], get_autocompletion),

@@ -42,6 +42,8 @@
 
 	let setup: 'minimal' | 'basic' | undefined = 'basic';
 
+	let tab_size = 2;
+
 	function change_pos() {
 		$store.view?.focus();
 		cursorPos = 0 + Math.floor(Math.random() * ($store.value?.length ?? 0));
@@ -56,6 +58,8 @@
 <button on:click={() => (selected = 'md')}>MD</button>
 
 <button on:click={change_pos}>Change cursor: {cursorPos}</button>
+
+<button on:click={() => (tab_size += 2)}>Change tab size: {tab_size}</button>
 
 <select bind:value={setup}>
 	<option value="minimal">Minimal</option>
@@ -84,7 +88,7 @@
 				]).then(([{ markdown }, { languages }]) => markdown({ codeLanguages: languages })),
 		},
 		useTabs: true,
-		tabSize: 2,
+		tabSize: tab_size,
 		theme: oneDark,
 		extensions: [],
 		cursorPos,

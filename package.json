@@ -10,9 +10,9 @@
 		"ci:release": "pnpm run compile && changeset publish"
 	},
 	"devDependencies": {
-		"@changesets/cli": "^2.26.1",
-		"tsup": "^6.7.0",
-		"typescript": "^5.0.4"
+		"@changesets/cli": "^2.27.7",
+		"tsup": "^8.1.0",
+		"typescript": "^5.5.3"
 	},
 	"type": "module"
 }
